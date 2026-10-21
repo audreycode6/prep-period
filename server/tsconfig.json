@@ -9,5 +9,5 @@
     "outDir": "dist",
     "noEmit": true
   },
-  "include": ["src", "migrations", "knexfile.ts"]
+  "include": ["src", "migrations", "knexfile.ts", "vitest.config.ts"]
 }
