@@ -73,7 +73,7 @@ export async function up(knex: Knex): Promise<void> {
       .inTable('classroom_profiles')
       .onDelete('SET NULL');
     table.string('title').notNullable();
-    table.integer('position').notNullable();
+    table.text('description').nullable();
     table.integer('start_minutes').notNullable();
     table.integer('end_minutes').notNullable();
 
@@ -94,6 +94,7 @@ export async function up(knex: Knex): Promise<void> {
       .inTable('blocks')
       .onDelete('CASCADE');
     table.text('label').notNullable();
+    table.jsonb('steps').notNullable().defaultTo('[]'); // [{ text }], array order = step order
     table.integer('minutes').nullable(); // null = flexible
     table.integer('position').notNullable();
 
@@ -102,16 +103,23 @@ export async function up(knex: Knex): Promise<void> {
       [],
       'activities_minutes_check',
     );
+    table.unique(['id', 'block_id']);
     table.timestamps(true, true);
   });
 
   await knex.schema.createTable('annotations', (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
+    table.uuid('activity_id').nullable(); // null = whole block
     table
       .uuid('block_id')
       .notNullable()
       .references('id')
       .inTable('blocks')
+      .onDelete('CASCADE');
+    table
+      .foreign(['activity_id', 'block_id'])
+      .references(['id', 'block_id'])
+      .inTable('activities')
       .onDelete('CASCADE');
     table.string('type').notNullable();
     table.text('text').notNullable();
