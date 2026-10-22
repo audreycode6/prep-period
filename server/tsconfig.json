@@ -6,9 +6,8 @@
     "strict": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "rootDir": "src",
     "outDir": "dist",
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "migrations", "knexfile.ts", "vitest.config.ts"]
 }
