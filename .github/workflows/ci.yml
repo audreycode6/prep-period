@@ -26,6 +26,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://prep:prep@localhost:5432/prep_period
+      SESSION_SECRET: test-only-not-secret
 
     steps:
       - uses: actions/checkout@v7

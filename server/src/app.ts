@@ -1,9 +1,11 @@
 import express from 'express';
 import type { HealthResponse } from '@prep-period/shared';
+import { sessionMiddleware } from './middleware/session.js';
 
 export function createApp() {
   const app = express();
   app.use(express.json());
+  app.use(sessionMiddleware);
 
   app.get('/api/health', (_req, res) => {
     const body: HealthResponse = {

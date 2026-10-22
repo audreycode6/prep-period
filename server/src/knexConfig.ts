@@ -14,4 +14,7 @@ const knexConfig: Record<'development' | 'test', Knex.Config> = {
   test: { ...shared, connection: testUrl.toString() },
 };
 
+export const activeDatabaseUrl =
+  config.nodeEnv === 'test' ? testUrl.toString() : config.databaseUrl;
+
 export default knexConfig;
