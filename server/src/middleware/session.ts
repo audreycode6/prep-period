@@ -21,3 +21,9 @@ export const sessionMiddleware = session({
     secure: config.nodeEnv === 'production',
   },
 });
+
+declare module 'express-session' {
+  interface SessionData {
+    teacherId?: string;
+  }
+}
