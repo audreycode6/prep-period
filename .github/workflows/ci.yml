@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      postgress:
+      postgres:
         image: postgres:18
         env:
           POSTGRES_USER: prep
@@ -25,7 +25,8 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgres://prep:prep@localhost:5432/prep_period
+      DATABASE_URL: postgres://prep:prep@localhost:5432/prep_period_test
+      SESSION_SECRET: test-only-not-secret
 
     steps:
       - uses: actions/checkout@v7

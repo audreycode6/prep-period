@@ -1,9 +1,13 @@
 import express from 'express';
+import { authRouter } from './routes/auth.js';
 import type { HealthResponse } from '@prep-period/shared';
+import { sessionMiddleware } from './middleware/session.js';
 
 export function createApp() {
   const app = express();
   app.use(express.json());
+  app.use(sessionMiddleware);
+  app.use('/api/auth', authRouter);
 
   app.get('/api/health', (_req, res) => {
     const body: HealthResponse = {
