@@ -26,6 +26,12 @@ export async function findTeacherByEmail(
     .first();
 }
 
+export async function findTeacherById(
+  id: string,
+): Promise<TeacherRow | undefined> {
+  return db<TeacherRow>('teachers').where({ id }).first();
+}
+
 export async function insertTeacher(
   email: string,
   passwordHash: string,

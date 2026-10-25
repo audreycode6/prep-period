@@ -5,12 +5,15 @@ import { activeDatabaseUrl } from '../knexConfig.js';
 
 const PgStore = connectPgSimple(session);
 
+export const SESSION_COOKIE = 'sid';
+
 export const sessionStore = new PgStore({
   conString: activeDatabaseUrl,
   tableName: 'session',
 });
 
 export const sessionMiddleware = session({
+  name: SESSION_COOKIE,
   store: sessionStore,
   secret: config.sessionSecret,
   resave: false,
