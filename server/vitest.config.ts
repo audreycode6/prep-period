@@ -8,5 +8,6 @@ export default defineConfig({
   test: {
     globalSetup: './src/test/globalSetup.ts',
     env: { NODE_ENV: 'test' },
+    fileParallelism: false, // every file shares prep_period_test; parallel truncates would wipe each other's rows
   },
 });
