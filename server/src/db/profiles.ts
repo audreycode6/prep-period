@@ -23,7 +23,23 @@ type ProfileRow = {
   updated_at: Date;
 };
 
-function toProfile(row: ProfileRow): ClassroomProfile {
+// A row plus whether a plan or block points at it, computed per query.
+type ProfileRowWithInUse = ProfileRow & { in_use: boolean };
+
+// blocks.profile_id is ON DELETE SET NULL: deleting would quietly clear a block's profile
+const IN_USE = db.raw(
+  `(exists (select 1 from plans where plans.profile_id = classroom_profiles.id)
+    or exists (select 1 from blocks where blocks.profile_id = classroom_profiles.id)) as in_use`,
+);
+
+function profilesWithInUse(query: Knex | Knex.Transaction) {
+  return query<ProfileRowWithInUse>('classroom_profiles').select(
+    'classroom_profiles.*',
+    IN_USE,
+  );
+}
+
+function toProfile(row: ProfileRowWithInUse): ClassroomProfile {
   return {
     id: row.id,
     name: row.name,
@@ -32,22 +48,24 @@ function toProfile(row: ProfileRow): ClassroomProfile {
     contacts: row.contacts,
     classroomNotes: row.classroom_notes,
     studentNotes: row.student_notes,
+    inUse: row.in_use,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
 }
-function toSummary(row: ProfileRow): ClassroomProfileSummary {
+function toSummary(row: ProfileRowWithInUse): ClassroomProfileSummary {
   return {
     id: row.id,
     name: row.name,
     isDefault: row.is_default,
+    inUse: row.in_use,
   };
 }
 
 export async function listProfiles(
   teacherId: string,
 ): Promise<ClassroomProfileSummary[]> {
-  const rows = await db<ProfileRow>('classroom_profiles')
+  const rows = await profilesWithInUse(db)
     .where({ teacher_id: teacherId })
     .whereNull('archived_at')
     .orderBy([{ column: 'is_default', order: 'desc' }, 'name']);
@@ -58,7 +76,7 @@ export async function findProfile(
   teacherId: string,
   id: string,
 ): Promise<ClassroomProfile | undefined> {
-  const row = await db<ProfileRow>('classroom_profiles')
+  const row = await profilesWithInUse(db)
     .where({ id, teacher_id: teacherId })
     .whereNull('archived_at')
     .first();
@@ -100,7 +118,7 @@ export async function insertProfile(
         student_notes: JSON.stringify(input.studentNotes),
       })
       .returning('*');
-    return toProfile(row);
+    return toProfile({ ...row, in_use: false }); // nothing points at it yet
   });
 }
 
@@ -133,32 +151,55 @@ export async function updateProfile(
       await clearDefault(trx, teacherId);
     }
 
-    const [row]: ProfileRow[] = await trx('classroom_profiles')
+    await trx('classroom_profiles')
       .where({ id, teacher_id: teacherId })
-      .update(changes)
-      .returning('*');
-    return toProfile(row);
+      .update(changes);
+
+    const row = await profilesWithInUse(trx).where({ id }).first();
+    return row && toProfile(row);
   });
 }
 
+/**
+ * Deletes a profile nothing uses. Returns:
+ * 'deleted': the row was removed
+ * 'in_use': a plan or block points at it; archive it instead
+ * undefined: not found, not yours, or already archived
+ */
+export async function deleteProfile(
+  teacherId: string,
+  id: string,
+): Promise<'deleted' | 'in_use' | undefined> {
+  return db.transaction(async (trx) => {
+    const existing = await profilesWithInUse(trx)
+      .where({ id, teacher_id: teacherId })
+      .whereNull('archived_at')
+      .first();
+    if (!existing) return undefined;
+    if (existing.in_use) return 'in_use';
+
+    await trx('classroom_profiles').where({ id, teacher_id: teacherId }).del();
+    return 'deleted';
+  });
+}
+
+/**
+ * Archives a profile: hidden from the teacher, kept for the plans that use it,
+ * and never the default (a restore brings it back as not the default).
+ * Returns false when not found, not yours, or already archived.
+ */
 export async function archiveProfile(
   teacherId: string,
   id: string,
-): Promise<ClassroomProfile | undefined> {
-  const [row]: ProfileRow[] = await db('classroom_profiles')
+): Promise<boolean> {
+  const rows = await db('classroom_profiles')
     .where({ id, teacher_id: teacherId })
     .whereNull('archived_at')
-    .update({ archived_at: db.fn.now(), updated_at: db.fn.now() })
-    .returning('*');
-  return row ? toProfile(row) : undefined;
-}
-
-export async function countPlansForProfile(
-  teacherId: string,
-  id: string,
-): Promise<number> {
-  const [{ count }] = await db('plans')
-    .where({ profile_id: id, teacher_id: teacherId })
-    .count('* as count');
-  return Number(count);
+    .update({
+      archived_at: db.fn.now(),
+      is_default: false,
+      updated_at: db.fn.now(),
+    })
+    .returning('id');
+  return rows.length > 0;
 }

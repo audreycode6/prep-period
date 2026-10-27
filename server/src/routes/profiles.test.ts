@@ -112,6 +112,18 @@ describe('profiles: another teacher', () => {
     expect((await profileRow(owner.profileId)).archived_at).toBeNull();
   });
 
+  it("answers 404 when other archives owner's profile; row unchanged", async () => {
+    const { owner, other } = await twoTeachers();
+
+    const ownerBefore = await profileRow(owner.profileId);
+    const res = await other.agent.post(
+      `/api/profiles/${owner.profileId}/archive`,
+    );
+
+    expect(res.status).toBe(404);
+    expect(await profileRow(owner.profileId)).toEqual(ownerBefore);
+  });
+
   it("GET /api/profiles lists only the caller's own profiles", async () => {
     const { other } = await twoTeachers();
 
@@ -123,6 +135,7 @@ describe('profiles: another teacher', () => {
         id: other.profileId,
         name: "other@example.com's classroom",
         isDefault: true,
+        inUse: false,
       },
     ]);
   });
@@ -145,6 +158,7 @@ describe('profiles: no session', () => {
       await request(app).get(`/api/profiles/${randomId}`),
       await request(app).patch(`/api/profiles/${randomId}`),
       await request(app).delete(`/api/profiles/${randomId}`),
+      await request(app).post(`/api/profiles/${randomId}/archive`),
     ];
 
     for (const res of responses) {
@@ -173,42 +187,103 @@ describe('profiles: one teacher', () => {
 
     const listRes = await firstProfile.agent.get('/api/profiles');
     expect(listRes.body).toEqual([
-      { id: secondRes.body.id, name: 'Second', isDefault: true },
+      { id: secondRes.body.id, name: 'Second', isDefault: true, inUse: false },
       {
         id: firstProfile.profileId,
         name: "t@example.com's classroom",
         isDefault: false,
+        inUse: false,
       },
     ]);
   });
 
   //TODOoOOOO
 
-  it('answers 409 and keeps archived_at null while a plan uses the profile', async () => {
+  it('answers 409 on DELETE while a plan uses the profile, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
+    // straight into Postgres: plans route not built yet
     await db('plans').insert({
       teacher_id: user.teacherId,
       profile_id: user.profileId,
       title: 'Monday',
     });
-    //    (straight into Postgres: there's no plans route until week 2)
+
+    expect((await user.agent.get('/api/profiles')).body[0].inUse).toBe(true);
+
+    const before = await profileRow(user.profileId);
     const res = await user.agent.delete(`/api/profiles/${user.profileId}`);
     expect(res.status).toBe(409);
-    expect(res.body).toEqual({ error: 'profile is used by 1 plan(s)' }); // best to link to where it is in use for user expereince and wondering about how to address when profile is archived but is in use in plans
-    //    expect 409, and res.body toEqual { error: 'profile is used by 1 plan(s)' }
-    // 4. expect((await profileRow(t.profileId)).archived_at).toBeNull();
-    // 409: db('plans').insert({ teacher_id, profile_id, title: 'p' }),
-    //   DELETE → 409, profileRow(...).archived_at toBeNull()
+    expect(res.body).toEqual({ error: 'profile in use' });
+    expect(await profileRow(user.profileId)).toEqual(before);
   });
 
-  it('archives with 204, then404 on a second DELETE', async () => {
-    // 1. const t = await teacherWithProfile(createApp(), 't@example.com');
-    // 2. DELETE → expect 204
-    // 3. GET /api/profiles → expect(body).toEqual([])          gone from the API
-    // 4. expect((await profileRow(t.profileId)).archived_at).not.toBeNull();   still in Postgres
-    // 5. DELETE again → expect 404, body { error: 'profile not found' }
-    // archive: DELETE a profile with no plans → 204, gone from GET /api/profiles,
-    //   archived_at not null, and a second DELETE → 404 (the case that hung yesterday)
+  it('counts a block pointing at the profile as in use', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const otherRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Pull-out group' });
+    // the plan uses the first profile; one of its blocks uses the second
+    const [plan] = await db('plans')
+      .insert({
+        teacher_id: user.teacherId,
+        profile_id: user.profileId,
+        title: 'Monday',
+      })
+      .returning('id');
+    await db('blocks').insert({
+      plan_id: plan.id,
+      profile_id: otherRes.body.id,
+      title: 'Reading',
+      start_minutes: 540,
+      end_minutes: 600,
+    });
+
+    const res = await user.agent.delete(`/api/profiles/${otherRes.body.id}`);
+    expect(res.status).toBe(409);
+    expect(await profileRow(otherRes.body.id)).toBeDefined();
+  });
+
+  it('deletes a profile nothing uses with 204, then 404 on a second DELETE', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const res = await user.agent.delete(`/api/profiles/${user.profileId}`);
+    expect(res.status).toBe(204);
+
+    expect((await user.agent.get('/api/profiles')).body).toEqual([]);
+    expect(await profileRow(user.profileId)).toBeUndefined();
+
+    const again = await user.agent.delete(`/api/profiles/${user.profileId}`);
+    expect(again.status).toBe(404);
+    expect(again.body).toEqual({ error: 'profile not found' });
+  });
+
+  it('archives a profile a plan uses: hidden, not default, and the plan keeps pointing at it', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const [plan] = await db('plans')
+      .insert({
+        teacher_id: user.teacherId,
+        profile_id: user.profileId,
+        title: 'Monday',
+      })
+      .returning('id');
+
+    const res = await user.agent.post(
+      `/api/profiles/${user.profileId}/archive`,
+    );
+    expect(res.status).toBe(204);
+
+    expect((await user.agent.get('/api/profiles')).body).toEqual([]);
+    const row = await profileRow(user.profileId);
+    expect(row.archived_at).not.toBeNull();
+    expect(row.is_default).toBe(false);
+
+    const planRow = await db('plans').where({ id: plan.id }).first();
+    expect(planRow.profile_id).toBe(user.profileId);
+
+    const again = await user.agent.post(
+      `/api/profiles/${user.profileId}/archive`,
+    );
+    expect(again.status).toBe(404);
   });
 
   it.todo(

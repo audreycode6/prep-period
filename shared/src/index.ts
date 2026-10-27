@@ -58,11 +58,13 @@ export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;
 
 export type ClassroomProfile = z.infer<typeof profileFieldsSchema> & {
   id: string;
+  // a plan or block points at it, so it can be archived but not deleted
+  inUse: boolean;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ClassroomProfileSummary = Pick<
   ClassroomProfile,
-  'id' | 'name' | 'isDefault'
+  'id' | 'name' | 'isDefault' | 'inUse'
 >;

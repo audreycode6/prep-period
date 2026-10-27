@@ -8,7 +8,7 @@ import {
 } from '@prep-period/shared';
 import {
   archiveProfile,
-  countPlansForProfile,
+  deleteProfile,
   findProfile,
   insertProfile,
   listProfiles,
@@ -112,15 +112,28 @@ profilesRouter.delete(
       res.status(404).json({ error: 'profile not found' });
       return;
     }
-    const planCount = await countPlansForProfile(req.teacherId!, req.params.id);
-    if (planCount > 0) {
-      res
-        .status(409)
-        .json({ error: `profile is used by ${planCount} plan(s)` });
+    const result = await deleteProfile(req.teacherId!, req.params.id);
+    if (result === undefined) {
+      res.status(404).json({ error: 'profile not found' });
+      return;
+    }
+    if (result === 'in_use') {
+      res.status(409).json({ error: 'profile in use' });
+      return;
+    }
+    res.status(204).end();
+  },
+);
+
+profilesRouter.post(
+  '/:id/archive',
+  async (req: Request<IdParams>, res: Response<ApiError>) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'profile not found' });
       return;
     }
     const archived = await archiveProfile(req.teacherId!, req.params.id);
-    if (archived === undefined) {
+    if (!archived) {
       res.status(404).json({ error: 'profile not found' });
       return;
     }
