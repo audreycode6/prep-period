@@ -73,7 +73,7 @@ describe('profiles: another teacher', () => {
     expect(res.body).toEqual(missing.body);
   });
 
-  it("geanswersts 404 on PATCH name; cannot rename another teacher's profile", async () => {
+  it("answers 404 on PATCH name; cannot rename another teacher's profile", async () => {
     const { owner, other } = await twoTeachers();
 
     const before = await profileRow(owner.profileId);
