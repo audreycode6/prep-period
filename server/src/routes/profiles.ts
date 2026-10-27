@@ -2,10 +2,18 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
   profileCreateSchema,
+  profileUpdateSchema,
   type ClassroomProfile,
   type ClassroomProfileSummary,
 } from '@prep-period/shared';
-import { findProfile, insertProfile, listProfiles } from '../db/profiles.js';
+import {
+  archiveProfile,
+  countPlansForProfile,
+  findProfile,
+  insertProfile,
+  listProfiles,
+  updateProfile,
+} from '../db/profiles.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 
 export const profilesRouter = Router();
@@ -63,5 +71,59 @@ profilesRouter.get(
       return;
     }
     res.json(profile);
+  },
+);
+
+profilesRouter.patch(
+  '/:id',
+  async (
+    req: Request<IdParams, ClassroomProfile | ApiError, unknown>,
+    res: Response<ClassroomProfile | ApiError>,
+  ) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'profile not found' });
+      return;
+    }
+    const result = profileUpdateSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        error: 'update fail',
+        fields: z.flattenError(result.error).fieldErrors,
+      });
+      return;
+    }
+    const profile = await updateProfile(
+      req.teacherId!,
+      req.params.id,
+      result.data,
+    );
+    if (profile === undefined) {
+      res.status(404);
+      return;
+    }
+    res.json(profile);
+  },
+);
+
+profilesRouter.delete(
+  '/:id',
+  async (req: Request<IdParams>, res: Response<ApiError>) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'profile not found' });
+      return;
+    }
+    const planCount = await countPlansForProfile(req.teacherId!, req.params.id);
+    if (planCount > 0) {
+      res
+        .status(409)
+        .json({ error: `profile is used by ${planCount} plan(s)` });
+      return;
+    }
+    const archived = await archiveProfile(req.teacherId!, req.params.id);
+    if (archived === undefined) {
+      res.status(404);
+      return;
+    }
+    res.status(204).end();
   },
 );
