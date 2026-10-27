@@ -87,7 +87,7 @@ profilesRouter.patch(
     const result = profileUpdateSchema.safeParse(req.body);
     if (!result.success) {
       res.status(400).json({
-        error: 'update fail',
+        error: 'invalid profile',
         fields: z.flattenError(result.error).fieldErrors,
       });
       return;
@@ -98,7 +98,7 @@ profilesRouter.patch(
       result.data,
     );
     if (profile === undefined) {
-      res.status(404);
+      res.status(404).json({ error: 'profile not found' });
       return;
     }
     res.json(profile);
@@ -121,7 +121,7 @@ profilesRouter.delete(
     }
     const archived = await archiveProfile(req.teacherId!, req.params.id);
     if (archived === undefined) {
-      res.status(404);
+      res.status(404).json({ error: 'profile not found' });
       return;
     }
     res.status(204).end();
