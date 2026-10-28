@@ -101,6 +101,10 @@ profilesRouter.patch(
       res.status(404).json({ error: 'profile not found' });
       return;
     }
+    if (profile === 'needs_new_default') {
+      res.status(409).json({ error: 'choose a new default first' });
+      return;
+    }
     res.json(profile);
   },
 );
@@ -121,6 +125,10 @@ profilesRouter.delete(
       res.status(409).json({ error: 'profile in use' });
       return;
     }
+    if (result === 'needs_new_default') {
+      res.status(409).json({ error: 'choose a new default first' });
+      return;
+    }
     res.status(204).end();
   },
 );
@@ -132,9 +140,13 @@ profilesRouter.post(
       res.status(404).json({ error: 'profile not found' });
       return;
     }
-    const archived = await archiveProfile(req.teacherId!, req.params.id);
-    if (!archived) {
+    const result = await archiveProfile(req.teacherId!, req.params.id);
+    if (result === undefined) {
       res.status(404).json({ error: 'profile not found' });
+      return;
+    }
+    if (result === 'needs_new_default') {
+      res.status(409).json({ error: 'choose a new default first' });
       return;
     }
     res.status(204).end();

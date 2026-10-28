@@ -92,6 +92,24 @@ async function clearDefault(
     .update({ is_default: false });
 }
 
+/**
+ * True when removing this profile would leave other live profiles with no
+ * default: the teacher has to move the default first.
+ */
+async function needsNewDefault(
+  trx: Knex.Transaction,
+  teacherId: string,
+  existing: { id: string; is_default: boolean },
+): Promise<boolean> {
+  if (!existing.is_default) return false;
+  const otherLiveProfile = await trx('classroom_profiles')
+    .where({ teacher_id: teacherId })
+    .whereNull('archived_at')
+    .whereNot({ id: existing.id })
+    .first('id');
+  return otherLiveProfile !== undefined;
+}
+
 export async function insertProfile(
   teacherId: string,
   input: ProfileCreate,
@@ -122,11 +140,20 @@ export async function insertProfile(
   });
 }
 
+/**
+ * Applies a partial update: only the fields present in input change, and
+ * setting isDefault: true moves the default here from the teacher's old one.
+ * Returns:
+ * the updated profile: done
+ * 'needs_new_default': isDefault: false on the current default; move the
+ *   default by setting isDefault: true on another profile instead
+ * undefined: not found, not yours, or archived
+ */
 export async function updateProfile(
   teacherId: string,
   id: string,
   input: ProfileUpdate,
-): Promise<ClassroomProfile | undefined> {
+): Promise<ClassroomProfile | 'needs_new_default' | undefined> {
   const changes: Record<string, unknown> = { updated_at: db.fn.now() };
   if (input.name !== undefined) changes.name = input.name;
   if (input.isDefault !== undefined) changes.is_default = input.isDefault;
@@ -146,6 +173,9 @@ export async function updateProfile(
       .first();
 
     if (!existing) return undefined;
+    if (input.isDefault === false && existing.is_default) {
+      return 'needs_new_default';
+    }
 
     if (input.isDefault) {
       await clearDefault(trx, teacherId);
@@ -164,12 +194,13 @@ export async function updateProfile(
  * Deletes a profile nothing uses. Returns:
  * 'deleted': the row was removed
  * 'in_use': a plan or block points at it; archive it instead
+ * 'needs_new_default': it's the default and other profiles exist
  * undefined: not found, not yours, or already archived
  */
 export async function deleteProfile(
   teacherId: string,
   id: string,
-): Promise<'deleted' | 'in_use' | undefined> {
+): Promise<'deleted' | 'in_use' | 'needs_new_default' | undefined> {
   return db.transaction(async (trx) => {
     const existing = await profilesWithInUse(trx)
       .where({ id, teacher_id: teacherId })
@@ -177,6 +208,9 @@ export async function deleteProfile(
       .first();
     if (!existing) return undefined;
     if (existing.in_use) return 'in_use';
+    if (await needsNewDefault(trx, teacherId, existing)) {
+      return 'needs_new_default';
+    }
 
     await trx('classroom_profiles').where({ id, teacher_id: teacherId }).del();
     return 'deleted';
@@ -184,22 +218,33 @@ export async function deleteProfile(
 }
 
 /**
- * Archives a profile: hidden from the teacher, kept for the plans that use it,
- * and never the default (a restore brings it back as not the default).
- * Returns false when not found, not yours, or already archived.
+ * Archives a profile: hidden from the teacher, kept for the plans that use
+ * it, and no longer the default. Returns:
+ * 'archived': done
+ * 'needs_new_default': it's the default and other profiles exist
+ * undefined: not found, not yours, or already archived
  */
 export async function archiveProfile(
   teacherId: string,
   id: string,
-): Promise<boolean> {
-  const rows = await db('classroom_profiles')
-    .where({ id, teacher_id: teacherId })
-    .whereNull('archived_at')
-    .update({
-      archived_at: db.fn.now(),
-      is_default: false,
-      updated_at: db.fn.now(),
-    })
-    .returning('id');
-  return rows.length > 0;
+): Promise<'archived' | 'needs_new_default' | undefined> {
+  return db.transaction(async (trx) => {
+    const existing = await trx('classroom_profiles')
+      .where({ id, teacher_id: teacherId })
+      .whereNull('archived_at')
+      .first();
+    if (!existing) return undefined;
+    if (await needsNewDefault(trx, teacherId, existing)) {
+      return 'needs_new_default';
+    }
+
+    await trx('classroom_profiles')
+      .where({ id, teacher_id: teacherId })
+      .update({
+        archived_at: db.fn.now(),
+        is_default: false,
+        updated_at: db.fn.now(),
+      });
+    return 'archived';
+  });
 }

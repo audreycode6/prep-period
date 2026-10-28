@@ -286,6 +286,61 @@ describe('profiles: one teacher', () => {
     expect(again.status).toBe(404);
   });
 
+  it('answers 409 on deleting the default while another profile exists, then deletes once the default moves', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const secondRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Second' });
+
+    const before = await profileRow(user.profileId);
+    const res = await user.agent.delete(`/api/profiles/${user.profileId}`);
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'choose a new default first' });
+    expect(await profileRow(user.profileId)).toEqual(before);
+
+    // move the default to the second profile, then delete
+    await user.agent
+      .patch(`/api/profiles/${secondRes.body.id}`)
+      .send({ isDefault: true });
+    const retry = await user.agent.delete(`/api/profiles/${user.profileId}`);
+    expect(retry.status).toBe(204);
+  });
+
+  it('answers 409 on archiving the default while another profile exists, then archives once the default moves', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const secondRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Second' });
+
+    const before = await profileRow(user.profileId);
+    const res = await user.agent.post(
+      `/api/profiles/${user.profileId}/archive`,
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'choose a new default first' });
+    expect(await profileRow(user.profileId)).toEqual(before);
+
+    await user.agent
+      .patch(`/api/profiles/${secondRes.body.id}`)
+      .send({ isDefault: true });
+    const retry = await user.agent.post(
+      `/api/profiles/${user.profileId}/archive`,
+    );
+    expect(retry.status).toBe(204);
+  });
+
+  it('answers 409 on PATCH isDefault: false on the default, even when it is the only profile', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const before = await profileRow(user.profileId);
+    const res = await user.agent
+      .patch(`/api/profiles/${user.profileId}`)
+      .send({ isDefault: false });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'choose a new default first' });
+    expect(await profileRow(user.profileId)).toEqual(before);
+  });
+
   it.todo(
     'returns its own notes and contacts on GET :id, and PATCH name keeps them',
   );
