@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export * from './time.js';
+
 export type HealthResponse = {
   status: 'ok';
   timestamp: string;
