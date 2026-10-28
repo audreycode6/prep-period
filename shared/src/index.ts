@@ -5,6 +5,11 @@ export type HealthResponse = {
   timestamp: string;
 };
 
+export type ApiErrorBody = {
+  error: string;
+  fields?: Record<string, string[] | undefined>;
+};
+
 export type Teacher = {
   id: string;
   email: string;
