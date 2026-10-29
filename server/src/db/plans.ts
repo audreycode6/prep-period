@@ -2,33 +2,177 @@
 import type {
   Activity,
   ActivityInput,
+  ActivityStep,
   Block,
   BlockCreate,
   BlockUpdate,
+  ClassroomProfile,
   Plan,
   PlanCreate,
   PlanSummary,
   PlanUpdate,
 } from '@prep-period/shared';
+import { db } from '../db.js';
+import { findProfileIncludingArchived } from './profiles.js';
 
-/**
- * Lists the teacher's plans, each with its profile's id, name and whether it
- * is archived.
- */
-export async function listPlans(teacherId: string): Promise<PlanSummary[]> {
-  throw new Error('not implemented');
+type PlanRow = {
+  id: string;
+  teacher_id: string;
+  profile_id: string;
+  title: string;
+  date: string | null; // 'YYYY-MM-DD', see the DATE parser in db.ts
+  is_template: boolean;
+  today_note: string | null;
+  share_token: string | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type BlockRow = {
+  id: string;
+  plan_id: string;
+  profile_id: string | null;
+  title: string;
+  description: string | null;
+  start_minutes: number;
+  end_minutes: number;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type ActivityRow = {
+  id: string;
+  block_id: string;
+  label: string;
+  steps: ActivityStep[];
+  minutes: number | null;
+  position: number;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type PlanSummaryRow = Pick<PlanRow, 'id' | 'title' | 'date' | 'updated_at'> & {
+  profile_id: string;
+  profile_name: string;
+  profile_archived_at: Date | null;
+};
+
+// Blocks are ordered by their times. 'id' breaks exact ties, so two blocks with
+// the same times and 'created_at' don't swap places between reloads.
+const BLOCK_ORDER = ['start_minutes', 'end_minutes', 'created_at', 'id'];
+
+function toActivity(row: ActivityRow): Activity {
+  return {
+    id: row.id,
+    label: row.label,
+    steps: row.steps,
+    minutes: row.minutes,
+  };
+}
+
+function toBlock(row: BlockRow, activities: Activity[]): Block {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    startMinutes: row.start_minutes,
+    endMinutes: row.end_minutes,
+    activities,
+  };
+}
+
+function toPlan(
+  row: PlanRow,
+  profile: ClassroomProfile,
+  blocks: Block[],
+): Plan {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.date,
+    todayNote: row.today_note,
+    profile,
+    blocks,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+function toSummary(row: PlanSummaryRow): PlanSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.date,
+    updatedAt: row.updated_at.toISOString(),
+    profile: {
+      id: row.profile_id,
+      name: row.profile_name,
+      isArchived: row.profile_archived_at !== null,
+    },
+  };
 }
 
 /**
- * Reads a plan with its profile (archived included), its blocks ordered by
- * start_minutes, end_minutes, created_at, and each block's activities ordered
- * by position. Returns undefined when the plan is not found or not yours.
+ * Lists the teacher's plans, ordered by most recently updated, each with its
+ * profile's id, name and whether it is archived.
+ */
+export async function listPlans(teacherId: string): Promise<PlanSummary[]> {
+  const rows: PlanSummaryRow[] = await db('plans')
+    .join('classroom_profiles', 'classroom_profiles.id', 'plans.profile_id')
+    .where('plans.teacher_id', teacherId)
+    .orderBy('plans.updated_at', 'desc')
+    .select(
+      'plans.id',
+      'plans.title',
+      'plans.date',
+      'plans.updated_at',
+      'classroom_profiles.id as profile_id',
+      'classroom_profiles.name as profile_name',
+      'classroom_profiles.archived_at as profile_archived_at',
+    );
+  return rows.map(toSummary);
+}
+
+/**
+ * Reads a plan with its profile (archived included), blocks ordered by their times
+ * and each block's activities ordered by position.
+ * Returns undefined when the plan is not found or not yours.
  */
 export async function findPlan(
   teacherId: string,
   id: string,
 ): Promise<Plan | undefined> {
-  throw new Error('not implemented');
+  const row = await db<PlanRow>('plans')
+    .where({ id, teacher_id: teacherId })
+    .first();
+  if (!row) return undefined;
+
+  const profile = await findProfileIncludingArchived(teacherId, row.profile_id);
+  if (!profile) {
+    throw new Error('Every plan should have a profile, but this one has none');
+  }
+
+  const blockRows = await db<BlockRow>('blocks')
+    .where({ plan_id: id })
+    .orderBy(BLOCK_ORDER);
+  const activityRows = await db<ActivityRow>('activities')
+    .whereIn(
+      'block_id',
+      blockRows.map((block) => block.id),
+    )
+    .orderBy('position');
+
+  const byBlock = new Map<string, Activity[]>();
+  for (const activityRow of activityRows) {
+    const activities = byBlock.get(activityRow.block_id) ?? [];
+    activities.push(toActivity(activityRow));
+    byBlock.set(activityRow.block_id, activities);
+  }
+
+  const blocks = blockRows.map((blockRow) =>
+    toBlock(blockRow, byBlock.get(blockRow.id) ?? []),
+  );
+  return toPlan(row, profile, blocks);
 }
 
 /**
