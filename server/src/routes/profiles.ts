@@ -16,15 +16,12 @@ import {
   updateProfile,
 } from '../db/profiles.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { isUuid } from './validation.js';
 
 export const profilesRouter = Router();
 profilesRouter.use(requireAuth);
 
 type IdParams = { id: string };
-
-function isUuid(value: string): boolean {
-  return z.uuid().safeParse(value).success;
-}
 
 profilesRouter.get(
   '/',
