@@ -134,26 +134,17 @@ export async function listPlans(teacherId: string): Promise<PlanSummary[]> {
 }
 
 /**
- * Reads a plan with its profile (archived included), blocks ordered by their times
- * and each block's activities ordered by position.
- * Returns undefined when the plan is not found or not yours.
+ * Builds the full plan from its row: the profile (archived included), blocks
+ * ordered by their times and each block's activities ordered by position.
  */
-export async function findPlan(
-  teacherId: string,
-  id: string,
-): Promise<Plan | undefined> {
-  const row = await db<PlanRow>('plans')
-    .where({ id, teacher_id: teacherId })
-    .first();
-  if (!row) return undefined;
-
+async function assemblePlan(teacherId: string, row: PlanRow): Promise<Plan> {
   const profile = await findProfileIncludingArchived(teacherId, row.profile_id);
   if (!profile) {
     throw new Error('Every plan should have a profile, but this one has none');
   }
 
   const blockRows = await db<BlockRow>('blocks')
-    .where({ plan_id: id })
+    .where({ plan_id: row.id })
     .orderBy(BLOCK_ORDER);
   const activityRows = await db<ActivityRow>('activities')
     .whereIn(
@@ -176,6 +167,21 @@ export async function findPlan(
 }
 
 /**
+ * Gets the teacher's plan by id, with its profile (archived included), blocks
+ * ordered by their times and each block's activities ordered by position.
+ * Returns undefined when the plan is not found or not yours.
+ */
+export async function findPlan(
+  teacherId: string,
+  id: string,
+): Promise<Plan | undefined> {
+  const row = await db<PlanRow>('plans')
+    .where({ id, teacher_id: teacherId })
+    .first();
+  return row ? assemblePlan(teacherId, row) : undefined;
+}
+
+/**
  * Creates a plan with no blocks. Without a profileId it uses the teacher's
  * default profile. Returns:
  * the new plan: done
@@ -187,7 +193,34 @@ export async function insertPlan(
   teacherId: string,
   input: PlanCreate,
 ): Promise<Plan | 'no_profile' | 'profile_not_found' | 'profile_archived'> {
-  throw new Error('not implemented');
+  let profileId: string;
+  if (input.profileId) {
+    const profile = await findProfileIncludingArchived(
+      teacherId,
+      input.profileId,
+    );
+    if (!profile) return 'profile_not_found';
+    if (profile.isArchived) return 'profile_archived';
+    profileId = profile.id;
+  } else {
+    const defaultProfile = await db('classroom_profiles')
+      .where({ teacher_id: teacherId, is_default: true })
+      .whereNull('archived_at')
+      .first('id');
+    if (!defaultProfile) return 'no_profile';
+    profileId = defaultProfile.id;
+  }
+
+  const [row]: PlanRow[] = await db('plans')
+    .insert({
+      teacher_id: teacherId,
+      profile_id: profileId,
+      title: input.title,
+      date: input.date,
+      today_note: input.todayNote,
+    })
+    .returning('*');
+  return assemblePlan(teacherId, row);
 }
 
 /**
