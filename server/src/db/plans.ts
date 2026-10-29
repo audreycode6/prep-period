@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- bodies not written yet */
+import type { Knex } from 'knex';
 import type {
   Activity,
   ActivityInput,
@@ -110,6 +111,16 @@ function toSummary(row: PlanSummaryRow): PlanSummary {
       isArchived: row.profile_archived_at !== null,
     },
   };
+}
+
+/**
+ * Sets the plan's updated_at to now.
+ */
+async function markPlanUpdated(
+  trx: Knex.Transaction,
+  planId: string,
+): Promise<void> {
+  await trx('plans').where({ id: planId }).update({ updated_at: db.fn.now() });
 }
 
 /**
@@ -262,7 +273,26 @@ export async function insertBlock(
   planId: string,
   input: BlockCreate,
 ): Promise<Block | 'invalid_times' | undefined> {
-  throw new Error('not implemented');
+  if (input.endMinutes <= input.startMinutes) return 'invalid_times';
+
+  return db.transaction(async (trx) => {
+    const plan = await trx('plans')
+      .where({ id: planId, teacher_id: teacherId })
+      .first('id');
+    if (!plan) return undefined;
+
+    const [row]: BlockRow[] = await trx('blocks')
+      .insert({
+        plan_id: planId,
+        title: input.title,
+        description: input.description,
+        start_minutes: input.startMinutes,
+        end_minutes: input.endMinutes,
+      })
+      .returning('*');
+    await markPlanUpdated(trx, planId);
+    return toBlock(row, []);
+  });
 }
 
 /**
@@ -292,18 +322,79 @@ export async function deleteBlock(
 }
 
 /**
- * Makes the block's activities exactly the given list, in order. An item with
- * an id updates that activity in place; an item without one is inserted; a
- * stored activity missing from the list is deleted. Returns:
- * the block's activities, in order: done
- * 'unknown_activity': an id is not one of this block's activities, or
- *   appears twice
+ * Returns the incoming ids that match existing activities, or
+ * 'invalid_activity_ids' when one doesn't match or appears twice. Items
+ * without an id are new and skipped.
+ */
+function findIdsToUpdate(
+  existingIds: Set<string>,
+  incoming: ActivityInput[],
+): Set<string> | 'invalid_activity_ids' {
+  const idsToUpdate = new Set<string>();
+  for (const activity of incoming) {
+    if (activity.id === undefined) continue;
+    if (!existingIds.has(activity.id) || idsToUpdate.has(activity.id)) {
+      // invalid input: stop the save before anything is written
+      return 'invalid_activity_ids';
+    }
+    idsToUpdate.add(activity.id);
+  }
+  return idsToUpdate;
+}
+
+/**
+ * Makes the block's activities match incoming, in order: items with an
+ * existing id are updated, items without one are inserted, and existing ones
+ * left out are deleted. Returns:
+ * the saved activities: done
+ * 'invalid_activity_ids': an id isn't this block's, or appears twice
  * undefined: block not found or not yours
  */
 export async function replaceActivities(
   teacherId: string,
   blockId: string,
-  activities: ActivityInput[],
-): Promise<Activity[] | 'unknown_activity' | undefined> {
-  throw new Error('not implemented');
+  incoming: ActivityInput[],
+): Promise<Activity[] | 'invalid_activity_ids' | undefined> {
+  return db.transaction(async (trx) => {
+    const block = await trx('blocks')
+      .join('plans', 'plans.id', 'blocks.plan_id')
+      .where({ 'blocks.id': blockId, 'plans.teacher_id': teacherId })
+      .first('blocks.plan_id');
+    if (!block) return undefined;
+
+    // ids of the block's activities in the database, before this save
+    const existingIds = new Set<string>(
+      await trx('activities').where({ block_id: blockId }).pluck('id'),
+    );
+    const idsToUpdate = findIdsToUpdate(existingIds, incoming);
+    if (idsToUpdate === 'invalid_activity_ids') return 'invalid_activity_ids';
+    const idsToDelete = [...existingIds].filter((id) => !idsToUpdate.has(id));
+    await trx('activities').whereIn('id', idsToDelete).del();
+
+    // Write incoming in order: the index becomes position, items without an id
+    // are inserted, and the rest are updated in place.
+    for (const [position, activity] of incoming.entries()) {
+      const fields = {
+        label: activity.label,
+        steps: JSON.stringify(activity.steps),
+        minutes: activity.minutes,
+        position,
+      };
+
+      if (activity.id === undefined) {
+        await trx('activities').insert({ ...fields, block_id: blockId });
+      } else {
+        await trx('activities')
+          .where({ id: activity.id })
+          .update({ ...fields, updated_at: db.fn.now() });
+      }
+    }
+
+    await markPlanUpdated(trx, block.plan_id);
+
+    const rows: ActivityRow[] = await trx('activities')
+      .where({ block_id: blockId })
+      .orderBy('position');
+    return rows.map(toActivity);
+  });
 }
