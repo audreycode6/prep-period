@@ -49,6 +49,7 @@ function toProfile(row: ProfileRowWithInUse): ClassroomProfile {
     classroomNotes: row.classroom_notes,
     studentNotes: row.student_notes,
     inUse: row.in_use,
+    isArchived: row.archived_at !== null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -59,6 +60,7 @@ function toSummary(row: ProfileRowWithInUse): ClassroomProfileSummary {
     name: row.name,
     isDefault: row.is_default,
     inUse: row.in_use,
+    isArchived: row.archived_at !== null,
   };
 }
 

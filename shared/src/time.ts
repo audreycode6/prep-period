@@ -5,6 +5,8 @@
  */
 const TIME_INPUT = /^(?<hours>[01]\d|2[0-3]):(?<minutes>[0-5]\d)$/;
 
+export const MINUTES_PER_DAY = 24 * 60;
+
 /**
  * Converts an `<input type="time">` value ("HH:MM", 24-hour) to minutes since
  * midnight. Returns null for an empty or malformed value, since an empty or
@@ -18,8 +20,8 @@ export function timeInputToMinutes(value: string): number | null {
 
 /**
  * Converts minutes since midnight to the zero-padded "HH:MM" value an
- * `<input type="time">` expects. Expects a whole number from 0 to 1439, the
- * range a block's times are stored in.
+ * `<input type="time">` expects. Expects a whole number of minutes within one
+ * day, the range a block's times are stored in.
  */
 export function minutesToTimeInput(minutes: number): string {
   const hours = String(Math.floor(minutes / 60)).padStart(2, '0');

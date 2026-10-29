@@ -136,6 +136,7 @@ describe('profiles: another teacher', () => {
         name: "other@example.com's classroom",
         isDefault: true,
         inUse: false,
+        isArchived: false,
       },
     ]);
   });
@@ -187,17 +188,22 @@ describe('profiles: one teacher', () => {
 
     const listRes = await firstProfile.agent.get('/api/profiles');
     expect(listRes.body).toEqual([
-      { id: secondRes.body.id, name: 'Second', isDefault: true, inUse: false },
+      {
+        id: secondRes.body.id,
+        name: 'Second',
+        isDefault: true,
+        inUse: false,
+        isArchived: false,
+      },
       {
         id: firstProfile.profileId,
         name: "t@example.com's classroom",
         isDefault: false,
         inUse: false,
+        isArchived: false,
       },
     ]);
   });
-
-  //TODOoOOOO
 
   it('answers 409 on DELETE while a plan uses the profile, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
