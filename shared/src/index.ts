@@ -151,3 +151,7 @@ export type Plan = Omit<z.infer<typeof planFieldsSchema>, 'profileId'> & {
   createdAt: string;
   updatedAt: string;
 };
+
+export type PlanSummary = Pick<Plan, 'id' | 'title' | 'date' | 'updatedAt'> & {
+  profile: Pick<ClassroomProfile, 'id' | 'name' | 'isArchived'>;
+};

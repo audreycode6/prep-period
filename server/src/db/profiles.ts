@@ -85,6 +85,20 @@ export async function findProfile(
   return row ? toProfile(row) : undefined;
 }
 
+/**
+ * Finds a teacher's profile by id, whether it is active or archived, so a plan
+ * can still show the profile it points at after that profile is archived.
+ */
+export async function findProfileIncludingArchived(
+  teacherId: string,
+  id: string,
+): Promise<ClassroomProfile | undefined> {
+  const row = await profilesWithInUse(db)
+    .where({ id, teacher_id: teacherId })
+    .first();
+  return row ? toProfile(row) : undefined;
+}
+
 async function clearDefault(
   trx: Knex.Transaction,
   teacherId: string,
