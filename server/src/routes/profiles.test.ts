@@ -14,6 +14,14 @@ afterAll(async () => {
   await db.destroy(); // knex's pool
 });
 
+/** One entry in each of a profile's four lists, for tests that check them. */
+const PROFILE_LISTS = {
+  schoolInfo: [{ label: 'Bell', note: 'Rings at 8:05' }],
+  contacts: [{ name: 'Ms. Lee', role: 'Principal', reach: 'ext. 201' }],
+  classroomNotes: [{ label: 'Lights', note: 'Switch by the door' }],
+  studentNotes: [{ label: 'Sam', note: 'Leaves at 9:15 on Tuesdays' }],
+};
+
 /** Reads the row straight from Postgres; catches broken PATCH */
 async function profileRow(id: string) {
   return db('classroom_profiles').where({ id }).first();
@@ -311,25 +319,42 @@ describe('profiles: one teacher', () => {
 
   it('returns its own notes and contacts on GET :id, and PATCH name keeps them', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
-    const fields = {
-      schoolInfo: [{ label: 'Bell', note: 'Rings at 8:05' }],
-      contacts: [{ name: 'Ms. Lee', role: 'Principal', reach: 'ext. 201' }],
-      classroomNotes: [{ label: 'Lights', note: 'Switch by the door' }],
-      studentNotes: [{ label: 'Sam', note: 'Leaves at 9:15 on Tuesdays' }],
-    };
     const created = await user.agent
       .post('/api/profiles')
-      .send({ name: 'Room 12', ...fields });
+      .send({ name: 'Room 12', ...PROFILE_LISTS });
 
     const read = await user.agent.get(`/api/profiles/${created.body.id}`);
     expect(read.status).toBe(200);
-    expect(read.body).toMatchObject({ name: 'Room 12', ...fields });
+    expect(read.body).toMatchObject({ name: 'Room 12', ...PROFILE_LISTS });
 
     const patched = await user.agent
       .patch(`/api/profiles/${created.body.id}`)
       .send({ name: 'Room 14' });
     expect(patched.status).toBe(200);
-    expect(patched.body).toMatchObject({ name: 'Room 14', ...fields });
+    expect(patched.body).toMatchObject({ name: 'Room 14', ...PROFILE_LISTS });
+  });
+
+  it('replaces the lists sent on PATCH and leaves the lists not sent unchanged', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const created = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Room 12', ...PROFILE_LISTS });
+
+    const patched = await user.agent
+      .patch(`/api/profiles/${created.body.id}`)
+      .send({
+        contacts: [{ name: 'Mr. Diaz', role: 'Counselor', reach: 'ext. 310' }],
+      });
+
+    const expected = {
+      name: 'Room 12',
+      ...PROFILE_LISTS,
+      contacts: [{ name: 'Mr. Diaz', role: 'Counselor', reach: 'ext. 310' }],
+    };
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject(expected);
+    const read = await user.agent.get(`/api/profiles/${created.body.id}`);
+    expect(read.body).toMatchObject(expected);
   });
 
   it('answers 404 on GET :id and PATCH for an archived profile, and changes nothing', async () => {

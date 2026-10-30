@@ -144,6 +144,36 @@ describe('plans: one teacher', () => {
     expect(res.body.blocks).toEqual([]);
   });
 
+  it('creates a plan on a non-default profile when its profileId is sent', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const secondRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Pull-out group' });
+
+    const res = await user.agent
+      .post('/api/plans')
+      .send({ title: 'Monday', profileId: secondRes.body.id });
+
+    expect(res.status).toBe(201);
+    expect(res.body.profile).toMatchObject({
+      id: secondRes.body.id,
+      name: 'Pull-out group',
+    });
+  });
+
+  it('reads a block with no activities back with an empty activities list', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+
+    const res = await user.agent.get(`/api/plans/${planId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.blocks).toEqual([
+      expect.objectContaining({ id: blockId, activities: [] }),
+    ]);
+  });
+
   it('answers 409 on POST with an archived profileId, and creates nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const archivedRes = await user.agent
