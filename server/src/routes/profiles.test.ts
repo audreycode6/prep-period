@@ -309,9 +309,111 @@ describe('profiles: one teacher', () => {
     expect(await profileRow(user.profileId)).toEqual(before);
   });
 
-  it.todo(
-    'returns its own notes and contacts on GET :id, and PATCH name keeps them',
-  );
-  it.todo('answers 400 with fields.name on a blank name, for POST and PATCH');
-  it.todo('answers 404, not 500, on a malformed id for GET, PATCH and DELETE');
+  it('returns its own notes and contacts on GET :id, and PATCH name keeps them', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const fields = {
+      schoolInfo: [{ label: 'Bell', note: 'Rings at 8:05' }],
+      contacts: [{ name: 'Ms. Lee', role: 'Principal', reach: 'ext. 201' }],
+      classroomNotes: [{ label: 'Lights', note: 'Switch by the door' }],
+      studentNotes: [{ label: 'Sam', note: 'Leaves at 9:15 on Tuesdays' }],
+    };
+    const created = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Room 12', ...fields });
+
+    const read = await user.agent.get(`/api/profiles/${created.body.id}`);
+    expect(read.status).toBe(200);
+    expect(read.body).toMatchObject({ name: 'Room 12', ...fields });
+
+    const patched = await user.agent
+      .patch(`/api/profiles/${created.body.id}`)
+      .send({ name: 'Room 14' });
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject({ name: 'Room 14', ...fields });
+  });
+
+  it('answers 404 on GET :id and PATCH for an archived profile, and changes nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    await user.agent.post(`/api/profiles/${user.profileId}/archive`);
+
+    const before = await profileRow(user.profileId);
+    const read = await user.agent.get(`/api/profiles/${user.profileId}`);
+    const patched = await user.agent
+      .patch(`/api/profiles/${user.profileId}`)
+      .send({ name: 'Renamed' });
+
+    expect(read.status).toBe(404);
+    expect(patched.status).toBe(404);
+    expect(await profileRow(user.profileId)).toEqual(before);
+  });
+
+  it('moves the default when a second profile is created with isDefault: true', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const res = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Second', isDefault: true });
+
+    expect(res.status).toBe(201);
+    expect(res.body.isDefault).toBe(true);
+    expect((await profileRow(user.profileId)).is_default).toBe(false);
+  });
+});
+
+/* Test input the schemas or the id check refuse:
+ each one is answered with a 400 before any query runs.
+ */
+describe('profiles: bad input', () => {
+  it('answers 400 with fields.name on a blank name, for POST and PATCH', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const before = await profileRow(user.profileId);
+    const created = await user.agent.post('/api/profiles').send({ name: '  ' });
+    const patched = await user.agent
+      .patch(`/api/profiles/${user.profileId}`)
+      .send({ name: '' });
+
+    for (const res of [created, patched]) {
+      expect(res.status).toBe(400);
+      expect(res.body.fields).toEqual({ name: ['Name is required'] });
+    }
+    expect(await profileRow(user.profileId)).toEqual(before);
+    expect(
+      await db('classroom_profiles').where({ teacher_id: user.teacherId }),
+    ).toHaveLength(1);
+  });
+
+  it('answers 404 on a malformed id for GET, PATCH, DELETE and archive', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const responses = [
+      await user.agent.get('/api/profiles/not-a-uuid'),
+      await user.agent.patch('/api/profiles/not-a-uuid').send({ name: 'x' }),
+      await user.agent.delete('/api/profiles/not-a-uuid'),
+      await user.agent.post('/api/profiles/not-a-uuid/archive'),
+    ];
+
+    for (const res of responses) {
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it('answers 400 naming the list in fields when a contact or note entry is missing a required field', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const res = await user.agent.post('/api/profiles').send({
+      name: 'Room 12',
+      contacts: [{ name: 'Ms. Lee' }],
+      studentNotes: [{ label: 'Sam' }],
+    });
+
+    expect(res.status).toBe(400);
+    expect(Object.keys(res.body.fields).sort()).toEqual([
+      'contacts',
+      'studentNotes',
+    ]);
+    expect(
+      await db('classroom_profiles').where({ teacher_id: user.teacherId }),
+    ).toHaveLength(1);
+  });
 });
