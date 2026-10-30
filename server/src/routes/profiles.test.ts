@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { db } from '../db.js';
 import { sessionStore } from '../middleware/session.js';
+import { teacherWithProfile, twoTeachers } from '../test/teachers.js';
 
 beforeEach(async () => {
   await db.raw('truncate table teachers, session cascade');
@@ -13,44 +14,13 @@ afterAll(async () => {
   await db.destroy(); // knex's pool
 });
 
-type Agent = ReturnType<typeof request.agent>;
-
-/**
- * Signs a teacher up through the real route and creates one profile.
- * Returns what the tests need: the logged-in agent, the teacher's id
- * , and the profile's id.
- */
-async function teacherWithProfile(
-  app: ReturnType<typeof createApp>,
-  email: string,
-): Promise<{ agent: Agent; teacherId: string; profileId: string }> {
-  const agent = request.agent(app);
-
-  const signupRes = await agent.post('/api/auth/signup').send({
-    email,
-    password: 'supercoolpw',
-  });
-  const profileRes = await agent
-    .post('/api/profiles')
-    .send({ name: `${email}'s classroom` });
-
-  return {
-    agent,
-    teacherId: signupRes.body.id,
-    profileId: profileRes.body.id,
-  };
-}
-
-async function twoTeachers() {
-  const app = createApp();
-  const owner = await teacherWithProfile(app, 'owner@example.com');
-  const other = await teacherWithProfile(app, 'other@example.com');
-  return {
-    app,
-    owner,
-    other,
-  };
-}
+/** One entry in each of a profile's four lists, for tests that check them. */
+const PROFILE_LISTS = {
+  schoolInfo: [{ label: 'Bell', note: 'Rings at 8:05' }],
+  contacts: [{ name: 'Ms. Lee', role: 'Principal', reach: 'ext. 201' }],
+  classroomNotes: [{ label: 'Lights', note: 'Switch by the door' }],
+  studentNotes: [{ label: 'Sam', note: 'Leaves at 9:15 on Tuesdays' }],
+};
 
 /** Reads the row straight from Postgres; catches broken PATCH */
 async function profileRow(id: string) {
@@ -136,6 +106,7 @@ describe('profiles: another teacher', () => {
         name: "other@example.com's classroom",
         isDefault: true,
         inUse: false,
+        isArchived: false,
       },
     ]);
   });
@@ -187,17 +158,22 @@ describe('profiles: one teacher', () => {
 
     const listRes = await firstProfile.agent.get('/api/profiles');
     expect(listRes.body).toEqual([
-      { id: secondRes.body.id, name: 'Second', isDefault: true, inUse: false },
+      {
+        id: secondRes.body.id,
+        name: 'Second',
+        isDefault: true,
+        inUse: false,
+        isArchived: false,
+      },
       {
         id: firstProfile.profileId,
         name: "t@example.com's classroom",
         isDefault: false,
         inUse: false,
+        isArchived: false,
       },
     ]);
   });
-
-  //TODOoOOOO
 
   it('answers 409 on DELETE while a plan uses the profile, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
@@ -341,9 +317,128 @@ describe('profiles: one teacher', () => {
     expect(await profileRow(user.profileId)).toEqual(before);
   });
 
-  it.todo(
-    'returns its own notes and contacts on GET :id, and PATCH name keeps them',
-  );
-  it.todo('answers 400 with fields.name on a blank name, for POST and PATCH');
-  it.todo('answers 404, not 500, on a malformed id for GET, PATCH and DELETE');
+  it('returns its own notes and contacts on GET :id, and PATCH name keeps them', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const created = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Room 12', ...PROFILE_LISTS });
+
+    const read = await user.agent.get(`/api/profiles/${created.body.id}`);
+    expect(read.status).toBe(200);
+    expect(read.body).toMatchObject({ name: 'Room 12', ...PROFILE_LISTS });
+
+    const patched = await user.agent
+      .patch(`/api/profiles/${created.body.id}`)
+      .send({ name: 'Room 14' });
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject({ name: 'Room 14', ...PROFILE_LISTS });
+  });
+
+  it('replaces the lists sent on PATCH and leaves the lists not sent unchanged', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const created = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Room 12', ...PROFILE_LISTS });
+
+    const patched = await user.agent
+      .patch(`/api/profiles/${created.body.id}`)
+      .send({
+        contacts: [{ name: 'Mr. Diaz', role: 'Counselor', reach: 'ext. 310' }],
+      });
+
+    const expected = {
+      name: 'Room 12',
+      ...PROFILE_LISTS,
+      contacts: [{ name: 'Mr. Diaz', role: 'Counselor', reach: 'ext. 310' }],
+    };
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject(expected);
+    const read = await user.agent.get(`/api/profiles/${created.body.id}`);
+    expect(read.body).toMatchObject(expected);
+  });
+
+  it('answers 404 on GET :id and PATCH for an archived profile, and changes nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    await user.agent.post(`/api/profiles/${user.profileId}/archive`);
+
+    const before = await profileRow(user.profileId);
+    const read = await user.agent.get(`/api/profiles/${user.profileId}`);
+    const patched = await user.agent
+      .patch(`/api/profiles/${user.profileId}`)
+      .send({ name: 'Renamed' });
+
+    expect(read.status).toBe(404);
+    expect(patched.status).toBe(404);
+    expect(await profileRow(user.profileId)).toEqual(before);
+  });
+
+  it('moves the default when a second profile is created with isDefault: true', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const res = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Second', isDefault: true });
+
+    expect(res.status).toBe(201);
+    expect(res.body.isDefault).toBe(true);
+    expect((await profileRow(user.profileId)).is_default).toBe(false);
+  });
+});
+
+/* Test input the schemas or the id check refuse:
+ each one is answered with a 400 before any query runs.
+ */
+describe('profiles: bad input', () => {
+  it('answers 400 with fields.name on a blank name, for POST and PATCH', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const before = await profileRow(user.profileId);
+    const created = await user.agent.post('/api/profiles').send({ name: '  ' });
+    const patched = await user.agent
+      .patch(`/api/profiles/${user.profileId}`)
+      .send({ name: '' });
+
+    for (const res of [created, patched]) {
+      expect(res.status).toBe(400);
+      expect(res.body.fields).toEqual({ name: ['Name is required'] });
+    }
+    expect(await profileRow(user.profileId)).toEqual(before);
+    expect(
+      await db('classroom_profiles').where({ teacher_id: user.teacherId }),
+    ).toHaveLength(1);
+  });
+
+  it('answers 404 on a malformed id for GET, PATCH, DELETE and archive', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const responses = [
+      await user.agent.get('/api/profiles/not-a-uuid'),
+      await user.agent.patch('/api/profiles/not-a-uuid').send({ name: 'x' }),
+      await user.agent.delete('/api/profiles/not-a-uuid'),
+      await user.agent.post('/api/profiles/not-a-uuid/archive'),
+    ];
+
+    for (const res of responses) {
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it('answers 400 naming the list in fields when a contact or note entry is missing a required field', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const res = await user.agent.post('/api/profiles').send({
+      name: 'Room 12',
+      contacts: [{ name: 'Ms. Lee' }],
+      studentNotes: [{ label: 'Sam' }],
+    });
+
+    expect(res.status).toBe(400);
+    expect(Object.keys(res.body.fields).sort()).toEqual([
+      'contacts',
+      'studentNotes',
+    ]);
+    expect(
+      await db('classroom_profiles').where({ teacher_id: user.teacherId }),
+    ).toHaveLength(1);
+  });
 });

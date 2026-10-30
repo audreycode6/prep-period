@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   profileCreateSchema,
   profileUpdateSchema,
+  type ApiErrorBody,
   type ClassroomProfile,
   type ClassroomProfileSummary,
 } from '@prep-period/shared';
@@ -15,19 +16,12 @@ import {
   updateProfile,
 } from '../db/profiles.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { isUuid } from './validation.js';
 
 export const profilesRouter = Router();
 profilesRouter.use(requireAuth);
 
-type ApiError = {
-  error: string;
-  fields?: Record<string, string[] | undefined>;
-};
 type IdParams = { id: string };
-
-function isUuid(value: string): boolean {
-  return z.uuid().safeParse(value).success;
-}
 
 profilesRouter.get(
   '/',
@@ -39,8 +33,12 @@ profilesRouter.get(
 profilesRouter.post(
   '/',
   async (
-    req: Request<Record<string, never>, ClassroomProfile | ApiError, unknown>,
-    res: Response<ClassroomProfile | ApiError>,
+    req: Request<
+      Record<string, never>,
+      ClassroomProfile | ApiErrorBody,
+      unknown
+    >,
+    res: Response<ClassroomProfile | ApiErrorBody>,
   ) => {
     const result = profileCreateSchema.safeParse(req.body);
     if (!result.success) {
@@ -59,7 +57,7 @@ profilesRouter.get(
   '/:id',
   async (
     req: Request<IdParams>,
-    res: Response<ClassroomProfile | ApiError>,
+    res: Response<ClassroomProfile | ApiErrorBody>,
   ) => {
     if (!isUuid(req.params.id)) {
       res.status(404).json({ error: 'profile not found' });
@@ -77,8 +75,8 @@ profilesRouter.get(
 profilesRouter.patch(
   '/:id',
   async (
-    req: Request<IdParams, ClassroomProfile | ApiError, unknown>,
-    res: Response<ClassroomProfile | ApiError>,
+    req: Request<IdParams, ClassroomProfile | ApiErrorBody, unknown>,
+    res: Response<ClassroomProfile | ApiErrorBody>,
   ) => {
     if (!isUuid(req.params.id)) {
       res.status(404).json({ error: 'profile not found' });
@@ -111,7 +109,7 @@ profilesRouter.patch(
 
 profilesRouter.delete(
   '/:id',
-  async (req: Request<IdParams>, res: Response<ApiError>) => {
+  async (req: Request<IdParams>, res: Response<ApiErrorBody>) => {
     if (!isUuid(req.params.id)) {
       res.status(404).json({ error: 'profile not found' });
       return;
@@ -135,7 +133,7 @@ profilesRouter.delete(
 
 profilesRouter.post(
   '/:id/archive',
-  async (req: Request<IdParams>, res: Response<ApiError>) => {
+  async (req: Request<IdParams>, res: Response<ApiErrorBody>) => {
     if (!isUuid(req.params.id)) {
       res.status(404).json({ error: 'profile not found' });
       return;
