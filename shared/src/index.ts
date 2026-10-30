@@ -97,6 +97,8 @@ export const planCreateSchema = planFieldsSchema.extend({
 export const planUpdateSchema = planFieldsSchema.partial();
 
 export type PlanCreate = z.infer<typeof planCreateSchema>;
+// what a client sends: date and todayNote may be left out
+export type PlanCreateRequest = z.input<typeof planCreateSchema>;
 export type PlanUpdate = z.infer<typeof planUpdateSchema>;
 
 export const blockFieldsSchema = z.object({
