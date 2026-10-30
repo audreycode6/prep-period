@@ -49,6 +49,29 @@ async function activityRows(blockId: string) {
  not give anything away.
  */
 describe('plans: another teacher', () => {
+  it("lists only the teacher's own plans on GET /", async () => {
+    const { owner, other } = await twoTeachers();
+    const planId = await createPlan(owner.agent);
+    await createPlan(other.agent);
+
+    const res = await owner.agent.get('/api/plans');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      {
+        id: planId,
+        title: 'Monday',
+        date: null,
+        updatedAt: expect.any(String),
+        profile: {
+          id: owner.profileId,
+          name: "owner@example.com's classroom",
+          isArchived: false,
+        },
+      },
+    ]);
+  });
+
   it("answers 404 on GET :id; cannot read another teacher's plan", async () => {
     const { owner, other } = await twoTeachers();
     const planId = await createPlan(owner.agent);
@@ -117,6 +140,7 @@ describe('plans: no session', () => {
     const randomId = crypto.randomUUID();
 
     const responses = [
+      await request(app).get('/api/plans'),
       await request(app).post('/api/plans').send({}),
       await request(app).get(`/api/plans/${randomId}`),
       await request(app).post(`/api/plans/${randomId}/blocks`).send({}),
