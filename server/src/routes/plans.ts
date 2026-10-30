@@ -6,8 +6,9 @@ import {
   type ApiErrorBody,
   type Block,
   type Plan,
+  type PlanSummary,
 } from '@prep-period/shared';
-import { findPlan, insertBlock, insertPlan } from '../db/plans.js';
+import { findPlan, insertBlock, insertPlan, listPlans } from '../db/plans.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { isUuid } from './validation.js';
 
@@ -16,6 +17,10 @@ plansRouter.use(requireAuth);
 
 type IdParams = { id: string };
 type PlanIdParams = { planId: string };
+
+plansRouter.get('/', async (req: Request, res: Response<PlanSummary[]>) => {
+  res.json(await listPlans(req.teacherId!));
+});
 
 plansRouter.post(
   '/',
