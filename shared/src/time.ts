@@ -28,3 +28,17 @@ export function minutesToTimeInput(minutes: number): string {
   const mins = String(minutes % 60).padStart(2, '0');
   return `${hours}:${mins}`;
 }
+
+/**
+ * Formats minutes since midnight as a clock time in the locale's style
+ * ("1:17 PM" in en-US, "13:17" in en-GB), the user's own when none is given.
+ * Uses UTC so a daylight-saving change can't shift the hour.
+ */
+export function minutesToDisplay(minutes: number, locale?: string): string {
+  const time = new Date(Date.UTC(1970, 0, 1, 0, minutes));
+  return new Intl.DateTimeFormat(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(time);
+}
