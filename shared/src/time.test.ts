@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { minutesToTimeInput, timeInputToMinutes } from './time.js';
+import {
+  minutesToDisplay,
+  minutesToTimeInput,
+  timeInputToMinutes,
+} from './time.js';
 
 describe('timeInputToMinutes', () => {
   it('converts a time input value to minutes since midnight', () => {
@@ -35,5 +39,25 @@ describe('minutesToTimeInput', () => {
     for (const minutes of [0, 480, 870, 1439]) {
       expect(timeInputToMinutes(minutesToTimeInput(minutes))).toBe(minutes);
     }
+  });
+});
+
+describe('minutesToDisplay', () => {
+  // Some ICU versions put a narrow no-break space before AM/PM, so spaces are
+  // compared as plain spaces.
+  const display = (minutes: number, locale: string) =>
+    minutesToDisplay(minutes, locale).replace(/\s/g, ' ');
+
+  it('formats 12-hour time with AM/PM in en-US', () => {
+    expect(display(797, 'en-US')).toBe('1:17 PM');
+    expect(display(480, 'en-US')).toBe('8:00 AM');
+    expect(display(0, 'en-US')).toBe('12:00 AM');
+    expect(display(720, 'en-US')).toBe('12:00 PM');
+    expect(display(1439, 'en-US')).toBe('11:59 PM');
+  });
+
+  it("formats in the given locale's style, not a fixed one", () => {
+    expect(display(797, 'en-GB')).toBe('13:17');
+    expect(display(480, 'en-GB')).toBe('8:00');
   });
 });
