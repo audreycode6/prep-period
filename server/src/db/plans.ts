@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- bodies not written yet */
 import type { Knex } from 'knex';
 import type {
   Activity,
@@ -327,6 +326,21 @@ export async function insertBlock(
 }
 
 /**
+ * Gets a block by id when its plan is the teacher's. Returns undefined when
+ * the block is not found or not yours.
+ */
+async function findOwnedBlock(
+  trx: Knex.Transaction,
+  teacherId: string,
+  id: string,
+): Promise<BlockRow | undefined> {
+  return trx('blocks')
+    .join('plans', 'plans.id', 'blocks.plan_id')
+    .where({ 'blocks.id': id, 'plans.teacher_id': teacherId })
+    .first('blocks.*');
+}
+
+/**
  * Applies a partial update: only the fields present in input change, and the
  * times are checked against the stored ones they are not replacing. Returns:
  * the updated block with its activities: done
@@ -338,7 +352,33 @@ export async function updateBlock(
   id: string,
   input: BlockUpdate,
 ): Promise<Block | 'invalid_times' | undefined> {
-  throw new Error('not implemented');
+  return db.transaction(async (trx) => {
+    const existing = await findOwnedBlock(trx, teacherId, id);
+    if (!existing) return undefined;
+
+    const startMinutes = input.startMinutes ?? existing.start_minutes;
+    const endMinutes = input.endMinutes ?? existing.end_minutes;
+    if (endMinutes <= startMinutes) return 'invalid_times';
+
+    const changes: Record<string, unknown> = { updated_at: db.fn.now() };
+    if (input.title !== undefined) changes.title = input.title;
+    if (input.description !== undefined)
+      changes.description = input.description;
+    if (input.startMinutes !== undefined)
+      changes.start_minutes = input.startMinutes;
+    if (input.endMinutes !== undefined) changes.end_minutes = input.endMinutes;
+
+    const [row]: BlockRow[] = await trx('blocks')
+      .where({ id })
+      .update(changes)
+      .returning('*');
+    await markPlanUpdated(trx, existing.plan_id);
+
+    const activityRows: ActivityRow[] = await trx('activities')
+      .where({ block_id: id })
+      .orderBy('position');
+    return toBlock(row, activityRows.map(toActivity));
+  });
 }
 
 /**
@@ -349,7 +389,14 @@ export async function deleteBlock(
   teacherId: string,
   id: string,
 ): Promise<boolean> {
-  throw new Error('not implemented');
+  return db.transaction(async (trx) => {
+    const existing = await findOwnedBlock(trx, teacherId, id);
+    if (!existing) return false;
+
+    await trx('blocks').where({ id }).del();
+    await markPlanUpdated(trx, existing.plan_id);
+    return true;
+  });
 }
 
 /**
