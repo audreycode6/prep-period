@@ -126,6 +126,55 @@ describe('plans: another teacher', () => {
     expect(res.body.fields).toEqual({ profileId: ['Profile not found'] });
     expect(await db('plans')).toEqual([]);
   });
+
+  it("answers 404 on PATCH and DELETE :id; cannot change or delete another teacher's plan", async () => {
+    const { owner, other } = await twoTeachers();
+    const planId = await createPlan(owner.agent);
+    const before = await db('plans').where({ id: planId }).first();
+
+    const patchRes = await other.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ title: 'Taken' });
+    const deleteRes = await other.agent.delete(`/api/plans/${planId}`);
+
+    expect(patchRes.status).toBe(404);
+    expect(deleteRes.status).toBe(404);
+    expect(await db('plans').where({ id: planId }).first()).toEqual(before);
+  });
+
+  it("answers 404 on PATCH and DELETE blocks/:id; cannot change or delete another teacher's block", async () => {
+    const { owner, other } = await twoTeachers();
+    const blockId = await addBlock(
+      owner.agent,
+      await createPlan(owner.agent),
+      480,
+      540,
+    );
+    const before = await db('blocks').where({ id: blockId }).first();
+
+    const patchRes = await other.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ title: 'Taken' });
+    const deleteRes = await other.agent.delete(`/api/blocks/${blockId}`);
+
+    expect(patchRes.status).toBe(404);
+    expect(deleteRes.status).toBe(404);
+    expect(await db('blocks').where({ id: blockId }).first()).toEqual(before);
+  });
+
+  it("answers 400 on PATCH :id with another teacher's profileId, and changes nothing", async () => {
+    const { owner, other } = await twoTeachers();
+    const planId = await createPlan(owner.agent);
+
+    const res = await owner.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ profileId: other.profileId });
+
+    expect(res.status).toBe(400);
+    expect(res.body.fields).toEqual({ profileId: ['Profile not found'] });
+    const row = await db('plans').where({ id: planId }).first();
+    expect(row.profile_id).toBe(owner.profileId);
+  });
 });
 
 /* Test plan routes before a session is active:
@@ -143,7 +192,11 @@ describe('plans: no session', () => {
       await request(app).get('/api/plans'),
       await request(app).post('/api/plans').send({}),
       await request(app).get(`/api/plans/${randomId}`),
+      await request(app).patch(`/api/plans/${randomId}`).send({}),
+      await request(app).delete(`/api/plans/${randomId}`),
       await request(app).post(`/api/plans/${randomId}/blocks`).send({}),
+      await request(app).patch(`/api/blocks/${randomId}`).send({}),
+      await request(app).delete(`/api/blocks/${randomId}`),
       await request(app).put(`/api/blocks/${randomId}/activities`).send([]),
     ];
 
@@ -440,6 +493,234 @@ describe('plans: one teacher', () => {
     expect(res.status).toBe(400);
     expect(await activityRows(afternoonId)).toEqual(before);
   });
+
+  it('changes only the fields sent on PATCH :id, leaving the rest of the plan unchanged', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const created = await user.agent.post('/api/plans').send({
+      title: 'Monday',
+      date: '2026-11-02',
+      todayNote: 'Fire drill at 10',
+    });
+
+    const res = await user.agent
+      .patch(`/api/plans/${created.body.id}`)
+      .send({ title: 'Tuesday' }); // only title changed
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      title: 'Tuesday',
+      date: '2026-11-02',
+      todayNote: 'Fire drill at 10',
+      profile: { id: user.profileId },
+    });
+  });
+
+  it('answers 409 on PATCH :id moving a plan to a different, archived profile, and changes nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const archivedRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Last year' });
+    await user.agent.post(`/api/profiles/${archivedRes.body.id}/archive`);
+
+    const res = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ profileId: archivedRes.body.id });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'profile is archived' });
+    const row = await db('plans').where({ id: planId }).first();
+    expect(row.profile_id).toBe(user.profileId);
+  });
+
+  it('answers 200 on PATCH :id to a plan whose own profile is archived, sending that profileId back', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    await user.agent.post(`/api/profiles/${user.profileId}/archive`);
+
+    const res = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ title: 'Tuesday', profileId: user.profileId });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      title: 'Tuesday',
+      profile: { id: user.profileId, isArchived: true },
+    });
+  });
+
+  it('deletes a plan with its blocks and activities on DELETE :id', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Warm-up' }]);
+
+    const res = await user.agent.delete(`/api/plans/${planId}`);
+
+    expect(res.status).toBe(204);
+    expect((await user.agent.get(`/api/plans/${planId}`)).status).toBe(404);
+    expect(await db('blocks').where({ plan_id: planId })).toEqual([]);
+    expect(await activityRows(blockId)).toEqual([]);
+  });
+
+  it("changes only the fields sent on PATCH blocks/:id and updates the plan's updatedAt", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Warm-up' }]);
+    const planBefore = await user.agent.get(`/api/plans/${planId}`);
+
+    const res = await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ title: 'Reading' }); // only change title property
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: blockId,
+      title: 'Reading',
+      startMinutes: 480,
+      endMinutes: 540,
+      activities: [{ label: 'Warm-up' }],
+    });
+    const planAfter = await user.agent.get(`/api/plans/${planId}`);
+    expect(new Date(planAfter.body.updatedAt).getTime()).toBeGreaterThan(
+      new Date(planBefore.body.updatedAt).getTime(),
+    );
+  });
+
+  it('answers 400 on PATCH blocks/:id when the new start is after the saved end', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const blockId = await addBlock(
+      user.agent,
+      await createPlan(user.agent),
+      480,
+      540,
+    );
+    const before = await db('blocks').where({ id: blockId }).first();
+
+    // valid on its own; only the stored endMinutes of 540 makes it negative
+    const res = await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ startMinutes: 600 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.fields).toEqual({
+      endMinutes: ['End time must be after start time'],
+    });
+    expect(await db('blocks').where({ id: blockId }).first()).toEqual(before);
+  });
+
+  it("removes the block from its plan on DELETE blocks/:id and updates the plan's updatedAt", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const keptId = await addBlock(user.agent, planId, 480, 540);
+    const deletedId = await addBlock(user.agent, planId, 600, 660);
+    const before = await user.agent.get(`/api/plans/${planId}`);
+
+    const res = await user.agent.delete(`/api/blocks/${deletedId}`);
+
+    expect(res.status).toBe(204);
+    const after = await user.agent.get(`/api/plans/${planId}`);
+    expect(after.body.blocks.map((b: { id: string }) => b.id)).toEqual([
+      keptId,
+    ]);
+    expect(new Date(after.body.updatedAt).getTime()).toBeGreaterThan(
+      new Date(before.body.updatedAt).getTime(),
+    );
+  });
+
+  it('moves the plan to another live profile on PATCH :id', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const secondRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Pull-out group' });
+
+    const res = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ profileId: secondRes.body.id });
+
+    expect(res.status).toBe(200);
+    expect(res.body.profile).toMatchObject({
+      id: secondRes.body.id,
+      name: 'Pull-out group',
+    });
+    const row = await db('plans').where({ id: planId }).first();
+    expect(row.profile_id).toBe(secondRes.body.id);
+  });
+
+  it('sets fields to null on PATCH :id when they are sent as null', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const created = await user.agent.post('/api/plans').send({
+      title: 'Monday',
+      date: '2026-11-02',
+      todayNote: 'Fire drill at 10',
+    });
+
+    const res = await user.agent
+      .patch(`/api/plans/${created.body.id}`)
+      .send({ date: null, todayNote: null });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      title: 'Monday',
+      date: null,
+      todayNote: null,
+    });
+  });
+
+  it('answers 200 on PATCH :id with an empty body and changes nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const before = await user.agent.get(`/api/plans/${planId}`);
+
+    const res = await user.agent.patch(`/api/plans/${planId}`).send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(before.body);
+  });
+
+  it('answers 200 on PATCH blocks/:id with an empty body and changes neither the block nor its plan', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const before = await user.agent.get(`/api/plans/${planId}`);
+    const blockBefore = await db('blocks').where({ id: blockId }).first();
+
+    const res = await user.agent.patch(`/api/blocks/${blockId}`).send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(before.body.blocks[0]);
+    expect(await db('blocks').where({ id: blockId }).first()).toEqual(
+      blockBefore,
+    );
+    const after = await user.agent.get(`/api/plans/${planId}`);
+    expect(after.body.updatedAt).toBe(before.body.updatedAt);
+  });
+
+  it('reorders the plan by the new times after PATCH blocks/:id', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const firstId = await addBlock(user.agent, planId, 480, 540);
+    const secondId = await addBlock(user.agent, planId, 600, 660);
+
+    // moves the 8:00 block to 11:00, after the 10:00 one
+    const res = await user.agent
+      .patch(`/api/blocks/${firstId}`)
+      .send({ startMinutes: 660, endMinutes: 720 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ startMinutes: 660, endMinutes: 720 });
+    const plan = await user.agent.get(`/api/plans/${planId}`);
+    expect(plan.body.blocks.map((b: { id: string }) => b.id)).toEqual([
+      secondId,
+      firstId,
+    ]);
+  });
 });
 
 /* Test input the schemas or the id check refuse:
@@ -451,9 +732,13 @@ describe('plans: bad input', () => {
 
     const responses = [
       await user.agent.get('/api/plans/not-a-uuid'),
+      await user.agent.patch('/api/plans/not-a-uuid').send({ title: 'Tue' }),
+      await user.agent.delete('/api/plans/not-a-uuid'),
       await user.agent
         .post('/api/plans/not-a-uuid/blocks')
         .send({ title: 'Math', startMinutes: 480, endMinutes: 540 }),
+      await user.agent.patch('/api/blocks/not-a-uuid').send({ title: 'Math' }),
+      await user.agent.delete('/api/blocks/not-a-uuid'),
       await user.agent.put('/api/blocks/not-a-uuid/activities').send([]),
     ];
 
@@ -514,5 +799,29 @@ describe('plans: bad input', () => {
       '1.minutes',
     ]);
     expect(await activityRows(blockId)).toEqual([]);
+  });
+
+  it('answers 400 with fields on PATCH :id and PATCH blocks/:id with a bad field, and changes nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const planBefore = await db('plans').where({ id: planId }).first();
+    const blockBefore = await db('blocks').where({ id: blockId }).first();
+
+    const planRes = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ title: '  ' });
+    const blockRes = await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ endMinutes: 1440 });
+
+    expect(planRes.status).toBe(400);
+    expect(Object.keys(planRes.body.fields)).toEqual(['title']);
+    expect(blockRes.status).toBe(400);
+    expect(Object.keys(blockRes.body.fields)).toEqual(['endMinutes']);
+    expect(await db('plans').where({ id: planId }).first()).toEqual(planBefore);
+    expect(await db('blocks').where({ id: blockId }).first()).toEqual(
+      blockBefore,
+    );
   });
 });
