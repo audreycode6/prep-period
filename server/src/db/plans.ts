@@ -240,7 +240,7 @@ export async function insertPlan(
  * Returns:
  * the updated plan: done
  * 'profile_not_found': profileId is not one of the teacher's profiles
- * 'profile_archived': profileId names a different, archived profile
+ * 'profile_archived': profileId exists and is theirs, but it's archived
  * undefined: plan not found or not yours
  */
 export async function updatePlan(
@@ -248,7 +248,37 @@ export async function updatePlan(
   id: string,
   input: PlanUpdate,
 ): Promise<Plan | 'profile_not_found' | 'profile_archived' | undefined> {
-  throw new Error('not implemented');
+  const existing = await db<PlanRow>('plans')
+    .where({ id, teacher_id: teacherId })
+    .first();
+  if (!existing) return undefined;
+
+  if (
+    input.profileId !== undefined &&
+    input.profileId !== existing.profile_id
+  ) {
+    const profile = await findProfileIncludingArchived(
+      teacherId,
+      input.profileId,
+    );
+    if (!profile) return 'profile_not_found';
+    // changing a plan to an archived profile is refused
+    if (profile.isArchived) return 'profile_archived';
+  }
+
+  const changes: Record<string, unknown> = { updated_at: db.fn.now() };
+  if (input.title !== undefined) changes.title = input.title;
+  if (input.date !== undefined) changes.date = input.date;
+  if (input.todayNote !== undefined) changes.today_note = input.todayNote;
+  if (input.profileId !== undefined) changes.profile_id = input.profileId;
+
+  const [row]: PlanRow[] = await db('plans')
+    .where({ id, teacher_id: teacherId })
+    .update(changes)
+    .returning('*');
+  // deleted between the read and the update
+  if (!row) return undefined;
+  return assemblePlan(teacherId, row);
 }
 
 /**
@@ -259,7 +289,8 @@ export async function deletePlan(
   teacherId: string,
   id: string,
 ): Promise<boolean> {
-  throw new Error('not implemented');
+  const deleted = await db('plans').where({ id, teacher_id: teacherId }).del();
+  return deleted > 0;
 }
 
 /**
