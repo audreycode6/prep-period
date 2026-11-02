@@ -234,12 +234,12 @@ export async function insertPlan(
 }
 
 /**
- * Applies a partial update: only the fields present in input change. A plan
- * may keep an archived profile it already uses, but cannot move to one.
- * Returns:
+ * Applies a partial update: only the fields present in input change, and an
+ * empty input changes nothing. A plan may keep an archived profile it already
+ * uses, but cannot move to a different archived one. Returns:
  * the updated plan: done
- * 'profile_not_found': profileId is not one of the teacher's profiles
- * 'profile_archived': profileId exists and is theirs, but it's archived
+ * 'profile_not_found': profileId is not one of this teacher's profiles
+ * 'profile_archived': profileId is a different profile of theirs that is archived
  * undefined: plan not found or not yours
  */
 export async function updatePlan(
@@ -265,15 +265,18 @@ export async function updatePlan(
     if (profile.isArchived) return 'profile_archived';
   }
 
-  const changes: Record<string, unknown> = { updated_at: db.fn.now() };
+  const changes: Record<string, unknown> = {};
   if (input.title !== undefined) changes.title = input.title;
   if (input.date !== undefined) changes.date = input.date;
   if (input.todayNote !== undefined) changes.today_note = input.todayNote;
   if (input.profileId !== undefined) changes.profile_id = input.profileId;
+  if (Object.keys(changes).length === 0) {
+    return assemblePlan(teacherId, existing);
+  }
 
   const [row]: PlanRow[] = await db('plans')
     .where({ id, teacher_id: teacherId })
-    .update(changes)
+    .update({ ...changes, updated_at: db.fn.now() })
     .returning('*');
   // deleted between the read and the update
   if (!row) return undefined;
@@ -341,8 +344,9 @@ async function findOwnedBlock(
 }
 
 /**
- * Applies a partial update: only the fields present in input change, and the
- * times are checked against the stored ones they are not replacing. Returns:
+ * Applies a partial update: only the fields present in input change, and an
+ * empty input changes nothing. Times are checked against the saved ones,
+ * so the block still ends after it starts. Returns:
  * the updated block with its activities: done
  * 'invalid_times': the resulting endMinutes is not after startMinutes
  * undefined: block not found or not yours
@@ -360,7 +364,7 @@ export async function updateBlock(
     const endMinutes = input.endMinutes ?? existing.end_minutes;
     if (endMinutes <= startMinutes) return 'invalid_times';
 
-    const changes: Record<string, unknown> = { updated_at: db.fn.now() };
+    const changes: Record<string, unknown> = {};
     if (input.title !== undefined) changes.title = input.title;
     if (input.description !== undefined)
       changes.description = input.description;
@@ -368,11 +372,14 @@ export async function updateBlock(
       changes.start_minutes = input.startMinutes;
     if (input.endMinutes !== undefined) changes.end_minutes = input.endMinutes;
 
-    const [row]: BlockRow[] = await trx('blocks')
-      .where({ id })
-      .update(changes)
-      .returning('*');
-    await markPlanUpdated(trx, existing.plan_id);
+    let row: BlockRow = existing;
+    if (Object.keys(changes).length > 0) {
+      [row] = await trx('blocks')
+        .where({ id })
+        .update({ ...changes, updated_at: db.fn.now() })
+        .returning('*');
+      await markPlanUpdated(trx, existing.plan_id);
+    }
 
     const activityRows: ActivityRow[] = await trx('activities')
       .where({ block_id: id })
