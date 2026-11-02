@@ -1,23 +1,15 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import type { PlanSummary } from '@prep-period/shared';
-import { ApiError } from '../api/client';
+import { errorMessage } from '../api/client';
 import { createPlan, getPlans } from '../api/plans';
 
-/**
- * Turns a failed request into a message for the screen: a 401 as not signed
- * in, otherwise the server's error when it sent one.
- */
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiError && err.status === 401) return 'Not signed in.';
-  if (err instanceof ApiError && err.body) return err.body.error;
-  return err instanceof Error ? err.message : 'Something went wrong.';
-}
+type Props = { onOpen: (planId: string) => void };
 
 /**
- * Lists the teacher's plans with their profile, and creates a new plan on the
- * default profile from a title.
+ * Lists the teacher's plans with their profile and opens one when its title is
+ * clicked. Creates a new plan on the default profile from a title and opens it.
  */
-export function PlanList() {
+export function PlanList({ onOpen }: Props) {
   // null until the first load answers, so loading and an empty list differ
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +28,10 @@ export function PlanList() {
     setCreating(true);
     setError(null);
     try {
-      await createPlan({ title });
-      setTitle('');
-      setPlans(await getPlans());
+      const plan = await createPlan({ title });
+      onOpen(plan.id);
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
       setCreating(false);
     }
   }
@@ -71,7 +61,9 @@ export function PlanList() {
         <ul>
           {plans.map((plan) => (
             <li key={plan.id}>
-              {plan.title}
+              <button type="button" onClick={() => onOpen(plan.id)}>
+                {plan.title}
+              </button>
               {plan.date && ` · ${plan.date}`} · {plan.profile.name}
               {plan.profile.isArchived && ' (archived)'}
             </li>
