@@ -3,12 +3,20 @@ import { z } from 'zod';
 import {
   blockCreateSchema,
   planCreateSchema,
+  planUpdateSchema,
   type ApiErrorBody,
   type Block,
   type Plan,
   type PlanSummary,
 } from '@prep-period/shared';
-import { findPlan, insertBlock, insertPlan, listPlans } from '../db/plans.js';
+import {
+  deletePlan,
+  findPlan,
+  insertBlock,
+  insertPlan,
+  listPlans,
+  updatePlan,
+} from '../db/plans.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { isUuid } from './validation.js';
 
@@ -69,6 +77,60 @@ plansRouter.get(
       return;
     }
     res.json(plan);
+  },
+);
+
+plansRouter.patch(
+  '/:id',
+  async (
+    req: Request<IdParams, Plan | ApiErrorBody, unknown>,
+    res: Response<Plan | ApiErrorBody>,
+  ) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'plan not found' });
+      return;
+    }
+    const result = planUpdateSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        error: 'invalid plan',
+        fields: z.flattenError(result.error).fieldErrors,
+      });
+      return;
+    }
+    const plan = await updatePlan(req.teacherId!, req.params.id, result.data);
+    if (plan === undefined) {
+      res.status(404).json({ error: 'plan not found' });
+      return;
+    }
+    if (plan === 'profile_not_found') {
+      res.status(400).json({
+        error: 'invalid plan',
+        fields: { profileId: ['Profile not found'] },
+      });
+      return;
+    }
+    if (plan === 'profile_archived') {
+      res.status(409).json({ error: 'profile is archived' });
+      return;
+    }
+    res.json(plan);
+  },
+);
+
+plansRouter.delete(
+  '/:id',
+  async (req: Request<IdParams>, res: Response<ApiErrorBody>) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'plan not found' });
+      return;
+    }
+    const deleted = await deletePlan(req.teacherId!, req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: 'plan not found' });
+      return;
+    }
+    res.status(204).end();
   },
 );
 

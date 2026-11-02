@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- bodies not written yet */
 import type { Knex } from 'knex';
 import type {
   Activity,
@@ -235,12 +234,12 @@ export async function insertPlan(
 }
 
 /**
- * Applies a partial update: only the fields present in input change. A plan
- * may keep an archived profile it already uses, but cannot move to one.
- * Returns:
+ * Applies a partial update: only the fields present in input change, and an
+ * empty input changes nothing. A plan may keep an archived profile it already
+ * uses, but cannot move to a different archived one. Returns:
  * the updated plan: done
- * 'profile_not_found': profileId is not one of the teacher's profiles
- * 'profile_archived': profileId names a different, archived profile
+ * 'profile_not_found': profileId is not one of this teacher's profiles
+ * 'profile_archived': profileId is a different profile of theirs that is archived
  * undefined: plan not found or not yours
  */
 export async function updatePlan(
@@ -248,7 +247,40 @@ export async function updatePlan(
   id: string,
   input: PlanUpdate,
 ): Promise<Plan | 'profile_not_found' | 'profile_archived' | undefined> {
-  throw new Error('not implemented');
+  const existing = await db<PlanRow>('plans')
+    .where({ id, teacher_id: teacherId })
+    .first();
+  if (!existing) return undefined;
+
+  if (
+    input.profileId !== undefined &&
+    input.profileId !== existing.profile_id
+  ) {
+    const profile = await findProfileIncludingArchived(
+      teacherId,
+      input.profileId,
+    );
+    if (!profile) return 'profile_not_found';
+    // changing a plan to an archived profile is refused
+    if (profile.isArchived) return 'profile_archived';
+  }
+
+  const changes: Record<string, unknown> = {};
+  if (input.title !== undefined) changes.title = input.title;
+  if (input.date !== undefined) changes.date = input.date;
+  if (input.todayNote !== undefined) changes.today_note = input.todayNote;
+  if (input.profileId !== undefined) changes.profile_id = input.profileId;
+  if (Object.keys(changes).length === 0) {
+    return assemblePlan(teacherId, existing);
+  }
+
+  const [row]: PlanRow[] = await db('plans')
+    .where({ id, teacher_id: teacherId })
+    .update({ ...changes, updated_at: db.fn.now() })
+    .returning('*');
+  // deleted between the read and the update
+  if (!row) return undefined;
+  return assemblePlan(teacherId, row);
 }
 
 /**
@@ -259,7 +291,8 @@ export async function deletePlan(
   teacherId: string,
   id: string,
 ): Promise<boolean> {
-  throw new Error('not implemented');
+  const deleted = await db('plans').where({ id, teacher_id: teacherId }).del();
+  return deleted > 0;
 }
 
 /**
@@ -296,8 +329,24 @@ export async function insertBlock(
 }
 
 /**
- * Applies a partial update: only the fields present in input change, and the
- * times are checked against the stored ones they are not replacing. Returns:
+ * Gets a block by id when its plan is the teacher's. Returns undefined when
+ * the block is not found or not yours.
+ */
+async function findOwnedBlock(
+  trx: Knex.Transaction,
+  teacherId: string,
+  id: string,
+): Promise<BlockRow | undefined> {
+  return trx('blocks')
+    .join('plans', 'plans.id', 'blocks.plan_id')
+    .where({ 'blocks.id': id, 'plans.teacher_id': teacherId })
+    .first('blocks.*');
+}
+
+/**
+ * Applies a partial update: only the fields present in input change, and an
+ * empty input changes nothing. Times are checked against the saved ones,
+ * so the block still ends after it starts. Returns:
  * the updated block with its activities: done
  * 'invalid_times': the resulting endMinutes is not after startMinutes
  * undefined: block not found or not yours
@@ -307,7 +356,36 @@ export async function updateBlock(
   id: string,
   input: BlockUpdate,
 ): Promise<Block | 'invalid_times' | undefined> {
-  throw new Error('not implemented');
+  return db.transaction(async (trx) => {
+    const existing = await findOwnedBlock(trx, teacherId, id);
+    if (!existing) return undefined;
+
+    const startMinutes = input.startMinutes ?? existing.start_minutes;
+    const endMinutes = input.endMinutes ?? existing.end_minutes;
+    if (endMinutes <= startMinutes) return 'invalid_times';
+
+    const changes: Record<string, unknown> = {};
+    if (input.title !== undefined) changes.title = input.title;
+    if (input.description !== undefined)
+      changes.description = input.description;
+    if (input.startMinutes !== undefined)
+      changes.start_minutes = input.startMinutes;
+    if (input.endMinutes !== undefined) changes.end_minutes = input.endMinutes;
+
+    let row: BlockRow = existing;
+    if (Object.keys(changes).length > 0) {
+      [row] = await trx('blocks')
+        .where({ id })
+        .update({ ...changes, updated_at: db.fn.now() })
+        .returning('*');
+      await markPlanUpdated(trx, existing.plan_id);
+    }
+
+    const activityRows: ActivityRow[] = await trx('activities')
+      .where({ block_id: id })
+      .orderBy('position');
+    return toBlock(row, activityRows.map(toActivity));
+  });
 }
 
 /**
@@ -318,7 +396,14 @@ export async function deleteBlock(
   teacherId: string,
   id: string,
 ): Promise<boolean> {
-  throw new Error('not implemented');
+  return db.transaction(async (trx) => {
+    const existing = await findOwnedBlock(trx, teacherId, id);
+    if (!existing) return false;
+
+    await trx('blocks').where({ id }).del();
+    await markPlanUpdated(trx, existing.plan_id);
+    return true;
+  });
 }
 
 /**
@@ -356,10 +441,7 @@ export async function replaceActivities(
   incoming: ActivityInput[],
 ): Promise<Activity[] | 'invalid_activity_ids' | undefined> {
   return db.transaction(async (trx) => {
-    const block = await trx('blocks')
-      .join('plans', 'plans.id', 'blocks.plan_id')
-      .where({ 'blocks.id': blockId, 'plans.teacher_id': teacherId })
-      .first('blocks.plan_id');
+    const block = await findOwnedBlock(trx, teacherId, blockId);
     if (!block) return undefined;
 
     // ids of the block's activities in the database, before this save
