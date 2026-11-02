@@ -116,6 +116,8 @@ export const blockUpdateSchema = blockFieldsSchema.partial();
 
 export type BlockCreate = z.infer<typeof blockCreateSchema>;
 export type BlockUpdate = z.infer<typeof blockUpdateSchema>;
+// what a client sends: description may be left out
+export type BlockCreateRequest = z.input<typeof blockCreateSchema>;
 
 export const activityStepSchema = z.object({ text: requiredText });
 export type ActivityStep = z.infer<typeof activityStepSchema>;
@@ -137,6 +139,8 @@ export const activityInputSchema = activityFieldsSchema.extend({
 export const activitiesReplaceSchema = z.array(activityInputSchema);
 
 export type ActivityInput = z.infer<typeof activityInputSchema>;
+// what a client sends: steps and minutes may be left out
+export type ActivityInputRequest = z.input<typeof activityInputSchema>;
 
 export type Activity = z.infer<typeof activityFieldsSchema> & { id: string };
 
