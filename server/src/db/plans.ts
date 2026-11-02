@@ -434,10 +434,7 @@ export async function replaceActivities(
   incoming: ActivityInput[],
 ): Promise<Activity[] | 'invalid_activity_ids' | undefined> {
   return db.transaction(async (trx) => {
-    const block = await trx('blocks')
-      .join('plans', 'plans.id', 'blocks.plan_id')
-      .where({ 'blocks.id': blockId, 'plans.teacher_id': teacherId })
-      .first('blocks.plan_id');
+    const block = await findOwnedBlock(trx, teacherId, blockId);
     if (!block) return undefined;
 
     // ids of the block's activities in the database, before this save
