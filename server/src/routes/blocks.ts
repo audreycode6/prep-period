@@ -2,10 +2,12 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
   activitiesReplaceSchema,
+  blockUpdateSchema,
   type Activity,
   type ApiErrorBody,
+  type Block,
 } from '@prep-period/shared';
-import { replaceActivities } from '../db/plans.js';
+import { deleteBlock, replaceActivities, updateBlock } from '../db/plans.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { isUuid } from './validation.js';
 
@@ -29,6 +31,56 @@ function fieldErrorsByPath(error: z.ZodError): Record<string, string[]> {
   }
   return fields;
 }
+
+blocksRouter.patch(
+  '/:id',
+  async (
+    req: Request<IdParams, Block | ApiErrorBody, unknown>,
+    res: Response<Block | ApiErrorBody>,
+  ) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'block not found' });
+      return;
+    }
+    const result = blockUpdateSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        error: 'invalid block',
+        fields: z.flattenError(result.error).fieldErrors,
+      });
+      return;
+    }
+    const block = await updateBlock(req.teacherId!, req.params.id, result.data);
+    if (block === undefined) {
+      res.status(404).json({ error: 'block not found' });
+      return;
+    }
+    if (block === 'invalid_times') {
+      res.status(400).json({
+        error: 'invalid block',
+        fields: { endMinutes: ['End time must be after start time'] },
+      });
+      return;
+    }
+    res.json(block);
+  },
+);
+
+blocksRouter.delete(
+  '/:id',
+  async (req: Request<IdParams>, res: Response<ApiErrorBody>) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'block not found' });
+      return;
+    }
+    const deleted = await deleteBlock(req.teacherId!, req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: 'block not found' });
+      return;
+    }
+    res.status(204).end();
+  },
+);
 
 blocksRouter.put(
   '/:id/activities',
