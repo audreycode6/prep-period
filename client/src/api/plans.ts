@@ -1,13 +1,12 @@
 import type {
-  Activity,
-  ActivityInputRequest,
   Block,
   BlockCreateRequest,
   Plan,
   PlanCreateRequest,
   PlanSummary,
+  PlanUpdate,
 } from '@prep-period/shared';
-import { apiGet, apiPost, apiPut } from './client';
+import { apiDel, apiGet, apiPatch, apiPost } from './client';
 
 export function getPlans() {
   return apiGet<PlanSummary[]>('/plans');
@@ -21,18 +20,20 @@ export function createPlan(plan: PlanCreateRequest) {
   return apiPost<Plan>('/plans', plan);
 }
 
-export function addBlock(planId: string, block: BlockCreateRequest) {
-  return apiPost<Block>(`/plans/${planId}/blocks`, block);
+/**
+ * Updates only the fields present in `changes` and returns the updated plan.
+ */
+export function updatePlan(id: string, changes: PlanUpdate) {
+  return apiPatch<Plan>(`/plans/${id}`, changes);
 }
 
 /**
- * Saves `activities` as the block's whole activity list, in order. An item
- * with an id updates that activity, one without is created, and any
- * activity left out is deleted.
+ * Deletes the plan along with its blocks, activities and annotations.
  */
-export function saveActivities(
-  blockId: string,
-  activities: ActivityInputRequest[],
-) {
-  return apiPut<Activity[]>(`/blocks/${blockId}/activities`, activities);
+export function deletePlan(id: string) {
+  return apiDel(`/plans/${id}`);
+}
+
+export function addBlock(planId: string, block: BlockCreateRequest) {
+  return apiPost<Block>(`/plans/${planId}/blocks`, block);
 }

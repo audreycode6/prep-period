@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Activity, ActivityInputRequest } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
-import { saveActivities } from '../api/plans';
+import { saveActivities } from '../api/blocks';
 
 // key identifies the draft on screen, since one added here has no id until
 // it is saved
