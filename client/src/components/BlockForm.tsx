@@ -1,24 +1,49 @@
 import { useState, type SubmitEvent } from 'react';
-import { timeInputToMinutes } from '@prep-period/shared';
+import {
+  minutesToTimeInput,
+  timeInputToMinutes,
+  type Block,
+} from '@prep-period/shared';
 import { errorMessage } from '../api/client';
-import { addBlock } from '../api/plans';
 
-type Props = { planId: string; onAdded: () => Promise<void> };
+export type BlockFormValues = Pick<
+  Block,
+  'title' | 'startMinutes' | 'endMinutes'
+>;
+
+type Props = {
+  // the block's current values when editing; omit for an empty new-block form
+  blockToEdit?: BlockFormValues;
+  submitLabel: string;
+  onSubmit: (values: BlockFormValues) => Promise<void>;
+  onCancel?: () => void;
+};
 
 /**
- * Adds a block to the plan from a title and a start and end time. Submitting
- * stays disabled until the title is filled and both times are set with the end
- * after the start.
+ * Form for a block's title and times, used both to add a block and to edit
+ * one. With `blockToEdit` it starts from that block's values; without it, it
+ * starts empty and clears after each submit. Submit stays disabled until the
+ * title is filled and the end is after the start, and an error thrown by
+ * `onSubmit` shows under the form.
  */
-export function BlockForm({ planId, onAdded }: Props) {
-  const [title, setTitle] = useState('');
+export function BlockForm({
+  blockToEdit,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: Props) {
+  const [title, setTitle] = useState(blockToEdit?.title ?? '');
   // the time inputs' values as the browser reports them: "HH:MM" (24-hour)
   // once a whole time is entered, and "" while empty or half-filled
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
+  const [start, setStart] = useState(
+    blockToEdit ? minutesToTimeInput(blockToEdit.startMinutes) : '',
+  );
+  const [end, setEnd] = useState(
+    blockToEdit ? minutesToTimeInput(blockToEdit.endMinutes) : '',
+  );
   const [error, setError] = useState<string | null>(null);
-  // true while an add is in flight, so a double click can't add two blocks
-  const [adding, setAdding] = useState(false);
+  // true while a submit is in flight, so a double click can't send it twice
+  const [submitting, setSubmitting] = useState(false);
 
   const startMinutes = timeInputToMinutes(start);
   const endMinutes = timeInputToMinutes(end);
@@ -29,30 +54,30 @@ export function BlockForm({ planId, onAdded }: Props) {
     startMinutes !== null &&
     endMinutes !== null &&
     !endBeforeStart;
-  const canAdd = isValid && !adding;
+  const canSubmit = isValid && !submitting;
 
   async function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!isValid) return;
 
-    setAdding(true);
+    setSubmitting(true);
     setError(null);
     try {
-      await addBlock(planId, { title, startMinutes, endMinutes });
-      setTitle('');
-      setStart('');
-      setEnd('');
-      await onAdded();
+      await onSubmit({ title, startMinutes, endMinutes });
+      if (!blockToEdit) {
+        setTitle('');
+        setStart('');
+        setEnd('');
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setAdding(false);
+      setSubmitting(false);
     }
   }
 
   return (
     <form onSubmit={handleSubmit}>
-      <h3>Add a block</h3>
       <label>
         Title
         <input
@@ -77,9 +102,14 @@ export function BlockForm({ planId, onAdded }: Props) {
           onChange={(e) => setEnd(e.target.value)}
         />
       </label>
-      <button type="submit" disabled={!canAdd}>
-        Add block
+      <button type="submit" disabled={!canSubmit}>
+        {submitLabel}
       </button>
+      {onCancel && (
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      )}
       {endBeforeStart && <p>End time must be after start time.</p>}
       {error && <p role="alert">{error}</p>}
     </form>
