@@ -5,18 +5,25 @@ import {
   type BlockUpdate,
   type Plan,
 } from '@prep-period/shared';
-import { updateBlock } from '../api/blocks';
+import { deleteBlock, updateBlock } from '../api/blocks';
 import { errorMessage } from '../api/client';
-import { addBlock, getPlan } from '../api/plans';
+import { addBlock, deletePlan, getPlan } from '../api/plans';
 import { BlockActivities } from './BlockActivities';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 
 type Props = { planId: string; onClose: () => void };
 
 /**
- * Editor for one plan: renders its blocks and activities, adds blocks, and
- * edits one block's title and times at a time. Refetches the plan after each
- * change so blocks stay sorted by start time.
+ * Returns a count with the right form of the word, for the delete confirms
+ */
+function pluralize(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/**
+ * Editor for one plan: renders its blocks and activities, adds and deletes
+ * blocks, edits one block's title and times at a time, and deletes the plan.
+ * Refetches the plan after each change so blocks stay sorted by start time.
  */
 export function PlanEditor({ planId, onClose }: Props) {
   // null until the first load answers
@@ -64,6 +71,53 @@ export function PlanEditor({ planId, onClose }: Props) {
     setEditingBlockId(null);
   }
 
+  /**
+   * Asks for confirmation, naming how many activities will be deleted with
+   * the block, then deletes it and reloads the plan. Cancel does nothing.
+   */
+  async function handleDeleteBlock(block: Block) {
+    const count = block.activities.length;
+    const cascadeNote =
+      count === 0
+        ? ''
+        : ` and its ${pluralize(count, 'activity', 'activities')}`;
+
+    if (!window.confirm(`Delete the "${block.title}" block${cascadeNote}?`)) {
+      return;
+    }
+
+    try {
+      await deleteBlock(block.id);
+      await reload();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  /**
+   * Asks for confirmation, naming how many blocks will be deleted with the
+   * plan, then deletes it and returns to the plan list. Cancel does nothing.
+   */
+  async function handleDeletePlan() {
+    if (plan === null) return;
+    const count = plan.blocks.length;
+    const cascadeNote =
+      count === 0
+        ? ''
+        : ` and its ${pluralize(count, 'block', 'blocks')} with their activities`;
+
+    if (!window.confirm(`Delete the "${plan.title}" plan${cascadeNote}?`)) {
+      return;
+    }
+
+    try {
+      await deletePlan(plan.id);
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
   return (
     <section>
       <button type="button" onClick={onClose}>
@@ -75,6 +129,9 @@ export function PlanEditor({ planId, onClose }: Props) {
       ) : (
         <>
           <h2>{plan.title}</h2>
+          <button type="button" onClick={handleDeletePlan}>
+            Delete plan
+          </button>
           <p>
             {plan.date && `${plan.date} · `}
             {plan.profile.name}
@@ -103,6 +160,12 @@ export function PlanEditor({ planId, onClose }: Props) {
                         onClick={() => setEditingBlockId(block.id)}
                       >
                         Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBlock(block)}
+                      >
+                        Delete
                       </button>
                     </>
                   )}
