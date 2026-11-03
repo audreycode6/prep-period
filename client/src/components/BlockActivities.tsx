@@ -89,10 +89,10 @@ export function BlockActivities({ blockId, activities }: Props) {
         </ul>
       )}
       <button type="button" onClick={addDraft}>
-        Add an activity
+        Add activity
       </button>
       <button type="button" disabled={!canSave} onClick={handleSave}>
-        Save block
+        Save activities
       </button>
       {error && <p role="alert">{error}</p>}
     </div>

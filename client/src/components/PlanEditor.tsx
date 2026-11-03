@@ -132,6 +132,8 @@ export function PlanEditor({ planId, onClose }: Props) {
           <button type="button" onClick={handleDeletePlan}>
             Delete plan
           </button>
+          <h3>Add a block</h3>
+          <BlockForm submitLabel="Add block" onSubmit={handleAdd} />
           <p>
             {plan.date && `${plan.date} · `}
             {plan.profile.name}
@@ -165,7 +167,7 @@ export function PlanEditor({ planId, onClose }: Props) {
                         type="button"
                         onClick={() => handleDeleteBlock(block)}
                       >
-                        Delete
+                        Delete block
                       </button>
                     </>
                   )}
@@ -177,8 +179,6 @@ export function PlanEditor({ planId, onClose }: Props) {
               ))}
             </ol>
           )}
-          <h3>Add a block</h3>
-          <BlockForm submitLabel="Add block" onSubmit={handleAdd} />
         </>
       )}
     </section>
