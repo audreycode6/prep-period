@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Activity, ActivityInputRequest } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
-import { saveActivities } from '../api/plans';
+import { saveActivities } from '../api/blocks';
 
 // key identifies the draft on screen, since one added here has no id until
 // it is saved
@@ -89,10 +89,10 @@ export function BlockActivities({ blockId, activities }: Props) {
         </ul>
       )}
       <button type="button" onClick={addDraft}>
-        Add an activity
+        Add activity
       </button>
       <button type="button" disabled={!canSave} onClick={handleSave}>
-        Save block
+        Save activities
       </button>
       {error && <p role="alert">{error}</p>}
     </div>
