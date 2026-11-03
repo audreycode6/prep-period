@@ -147,7 +147,7 @@ export function PlanEditor({ planId, onClose }: Props) {
                   {editingBlockId === block.id ? (
                     <BlockForm
                       blockToEdit={block}
-                      submitLabel="Save"
+                      submitLabel="Save block"
                       onSubmit={(values) => handleEdit(block, values)}
                       onCancel={() => setEditingBlockId(null)}
                     />
