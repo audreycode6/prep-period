@@ -4,6 +4,7 @@ import type {
   ActivityInput,
   ActivityStep,
   Annotation,
+  AnnotationInput,
   AnnotationType,
   Block,
   BlockCreate,
@@ -535,5 +536,57 @@ export async function replaceActivities(
       .where({ block_id: blockId })
       .orderBy('position');
     return rows.map(toActivity);
+  });
+}
+
+/**
+ * Replaces the block's annotations with incoming, in order: the old ones are
+ * deleted and incoming is inserted, each item's index becoming its position.
+ * Returns:
+ * the saved annotations, by postion: done
+ * 'invalid_activity_ids': an activityId isn't one of this block's activities
+ * undefined: block not found or not yours
+ */
+export async function replaceAnnotations(
+  teacherId: string,
+  blockId: string,
+  incoming: AnnotationInput[],
+): Promise<Annotation[] | 'invalid_activity_ids' | undefined> {
+  return db.transaction(async (trx) => {
+    const block = await findOwnedBlock(trx, teacherId, blockId);
+    if (!block) return undefined;
+
+    const activityIds = new Set<string>(
+      await trx('activities').where({ block_id: blockId }).pluck('id'),
+    );
+    const hasInvalidActivityId = incoming.some(
+      (annotation) =>
+        annotation.activityId !== null &&
+        !activityIds.has(annotation.activityId),
+    );
+    if (hasInvalidActivityId) return 'invalid_activity_ids';
+
+    await trx('annotations').where({ block_id: blockId }).del();
+
+    // skip the insert when incoming is empty: nothing to add, the old
+    // annotations were just deleted, and Knex throws on an insert of no rows
+    if (incoming.length > 0) {
+      await trx('annotations').insert(
+        incoming.map((annotation, position) => ({
+          block_id: blockId,
+          activity_id: annotation.activityId,
+          type: annotation.type,
+          text: annotation.text,
+          position,
+        })),
+      );
+    }
+
+    await markPlanUpdated(trx, block.plan_id);
+
+    const rows: AnnotationRow[] = await trx('annotations')
+      .where({ block_id: blockId })
+      .orderBy('position');
+    return rows.map(toAnnotation);
   });
 }

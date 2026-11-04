@@ -24,3 +24,8 @@ export async function addBlock(
 export async function activityRows(blockId: string) {
   return db('activities').where({ block_id: blockId }).orderBy('position');
 }
+
+/** Reads the block's annotation rows straight from Postgres, in order. */
+export async function annotationRows(blockId: string) {
+  return db('annotations').where({ block_id: blockId }).orderBy('position');
+}

@@ -2,12 +2,19 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
   activitiesReplaceSchema,
+  annotationsReplaceSchema,
   blockUpdateSchema,
   type Activity,
+  type Annotation,
   type ApiErrorBody,
   type Block,
 } from '@prep-period/shared';
-import { deleteBlock, replaceActivities, updateBlock } from '../db/plans.js';
+import {
+  deleteBlock,
+  replaceActivities,
+  replaceAnnotations,
+  updateBlock,
+} from '../db/plans.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { isUuid } from './validation.js';
 
@@ -117,5 +124,43 @@ blocksRouter.put(
       return;
     }
     res.json(activities);
+  },
+);
+
+blocksRouter.put(
+  '/:id/annotations',
+  async (
+    req: Request<IdParams, Annotation[] | ApiErrorBody, unknown>,
+    res: Response<Annotation[] | ApiErrorBody>,
+  ) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'block not found' });
+      return;
+    }
+    const result = annotationsReplaceSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        error: 'invalid annotations',
+        fields: fieldErrorsByPath(result.error),
+      });
+      return;
+    }
+
+    const annotations = await replaceAnnotations(
+      req.teacherId!,
+      req.params.id,
+      result.data,
+    );
+    if (annotations === undefined) {
+      res.status(404).json({ error: 'block not found' });
+      return;
+    }
+    if (annotations === 'invalid_activity_ids') {
+      res
+        .status(400)
+        .json({ error: "an annotation's activity isn't in this block" });
+      return;
+    }
+    res.json(annotations);
   },
 );

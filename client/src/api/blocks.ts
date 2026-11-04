@@ -1,6 +1,8 @@
 import type {
   Activity,
   ActivityInputRequest,
+  Annotation,
+  AnnotationInputRequest,
   Block,
   BlockUpdate,
 } from '@prep-period/shared';
@@ -31,4 +33,15 @@ export function saveActivities(
   activities: ActivityInputRequest[],
 ) {
   return apiPut<Activity[]>(`/blocks/${blockId}/activities`, activities);
+}
+
+/**
+ * Saves `annotations` as the block's whole annotation list, in order,
+ * replacing the old one, and returns the saved list.
+ */
+export function saveAnnotations(
+  blockId: string,
+  annotations: AnnotationInputRequest[],
+) {
+  return apiPut<Annotation[]>(`/blocks/${blockId}/annotations`, annotations);
 }
