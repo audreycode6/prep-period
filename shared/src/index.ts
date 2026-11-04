@@ -144,9 +144,43 @@ export type ActivityInputRequest = z.input<typeof activityInputSchema>;
 
 export type Activity = z.infer<typeof activityFieldsSchema> & { id: string };
 
+// the values annotations_type_check allows, from most to least urgent
+export const annotationTypeSchema = z.enum([
+  'must_know',
+  'heads_up',
+  'good_to_know',
+  'if_time',
+]);
+export type AnnotationType = z.infer<typeof annotationTypeSchema>;
+
+export const annotationFieldsSchema = z.object({
+  // null = the whole block; set, one of the block's activities
+  activityId: z.uuid().nullable(),
+  type: annotationTypeSchema,
+  text: requiredText,
+});
+
+// One annotation as sent in a block's annotation list: a missing activityId
+// becomes null, a note on the whole block.
+export const annotationInputSchema = annotationFieldsSchema.extend({
+  activityId: annotationFieldsSchema.shape.activityId.default(null),
+});
+
+export const annotationsReplaceSchema = z.array(annotationInputSchema);
+
+export type AnnotationInput = z.infer<typeof annotationInputSchema>;
+// what a client sends, before activityId's default applies
+export type AnnotationInputRequest = z.input<typeof annotationInputSchema>;
+
+export type Annotation = z.infer<typeof annotationFieldsSchema> & {
+  id: string;
+};
+
 export type Block = z.infer<typeof blockFieldsSchema> & {
   id: string;
   activities: Activity[];
+  // block-wide and per-activity annotations together, in their saved order
+  annotations: Annotation[];
 };
 
 export type Plan = Omit<z.infer<typeof planFieldsSchema>, 'profileId'> & {

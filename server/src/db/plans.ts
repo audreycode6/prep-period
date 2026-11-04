@@ -3,6 +3,8 @@ import type {
   Activity,
   ActivityInput,
   ActivityStep,
+  Annotation,
+  AnnotationType,
   Block,
   BlockCreate,
   BlockUpdate,
@@ -51,6 +53,17 @@ type ActivityRow = {
   updated_at: Date;
 };
 
+type AnnotationRow = {
+  id: string;
+  block_id: string;
+  activity_id: string | null;
+  type: AnnotationType;
+  text: string;
+  position: number;
+  created_at: Date;
+  updated_at: Date;
+};
+
 type PlanSummaryRow = Pick<PlanRow, 'id' | 'title' | 'date' | 'updated_at'> & {
   profile_id: string;
   profile_name: string;
@@ -70,7 +83,20 @@ function toActivity(row: ActivityRow): Activity {
   };
 }
 
-function toBlock(row: BlockRow, activities: Activity[]): Block {
+function toAnnotation(row: AnnotationRow): Annotation {
+  return {
+    id: row.id,
+    activityId: row.activity_id,
+    type: row.type,
+    text: row.text,
+  };
+}
+
+function toBlock(
+  row: BlockRow,
+  activities: Activity[],
+  annotations: Annotation[],
+): Block {
   return {
     id: row.id,
     title: row.title,
@@ -78,6 +104,42 @@ function toBlock(row: BlockRow, activities: Activity[]): Block {
     startMinutes: row.start_minutes,
     endMinutes: row.end_minutes,
     activities,
+    annotations,
+  };
+}
+
+/**
+ * Maps each row with `toItem` and groups the items by the row's block_id,
+ * keeping row order. Blocks with no rows have no entry in the Map.
+ */
+function groupByBlock<Row extends { block_id: string }, Item>(
+  rows: Row[],
+  toItem: (row: Row) => Item,
+): Map<string, Item[]> {
+  const byBlock = new Map<string, Item[]>();
+  for (const row of rows) {
+    const items = byBlock.get(row.block_id) ?? [];
+    items.push(toItem(row));
+    byBlock.set(row.block_id, items);
+  }
+  return byBlock;
+}
+
+/**
+ * Reads the activities and annotations of the given blocks, each by position
+ * and grouped by block id. Takes db or a transaction, so a
+ * caller inside a transaction reads its own writes.
+ */
+async function readBlockContents(conn: Knex, blockIds: string[]) {
+  const activityRows: ActivityRow[] = await conn('activities')
+    .whereIn('block_id', blockIds)
+    .orderBy('position');
+  const annotationRows: AnnotationRow[] = await conn('annotations')
+    .whereIn('block_id', blockIds)
+    .orderBy('position');
+  return {
+    activities: groupByBlock(activityRows, toActivity),
+    annotations: groupByBlock(annotationRows, toAnnotation),
   };
 }
 
@@ -145,7 +207,8 @@ export async function listPlans(teacherId: string): Promise<PlanSummary[]> {
 
 /**
  * Builds the full plan from its row: the profile (archived included), blocks
- * ordered by their times and each block's activities ordered by position.
+ * ordered by their times, and each block's activities and annotations by
+ * position.
  */
 async function assemblePlan(teacherId: string, row: PlanRow): Promise<Plan> {
   const profile = await findProfileIncludingArchived(teacherId, row.profile_id);
@@ -156,29 +219,25 @@ async function assemblePlan(teacherId: string, row: PlanRow): Promise<Plan> {
   const blockRows = await db<BlockRow>('blocks')
     .where({ plan_id: row.id })
     .orderBy(BLOCK_ORDER);
-  const activityRows = await db<ActivityRow>('activities')
-    .whereIn(
-      'block_id',
-      blockRows.map((block) => block.id),
-    )
-    .orderBy('position');
-
-  const byBlock = new Map<string, Activity[]>();
-  for (const activityRow of activityRows) {
-    const activities = byBlock.get(activityRow.block_id) ?? [];
-    activities.push(toActivity(activityRow));
-    byBlock.set(activityRow.block_id, activities);
-  }
+  const { activities, annotations } = await readBlockContents(
+    db,
+    blockRows.map((block) => block.id),
+  );
 
   const blocks = blockRows.map((blockRow) =>
-    toBlock(blockRow, byBlock.get(blockRow.id) ?? []),
+    toBlock(
+      blockRow,
+      activities.get(blockRow.id) ?? [],
+      annotations.get(blockRow.id) ?? [],
+    ),
   );
   return toPlan(row, profile, blocks);
 }
 
 /**
  * Gets the teacher's plan by id, with its profile (archived included), blocks
- * ordered by their times and each block's activities ordered by position.
+ * ordered by their times, and each block's activities and annotations by
+ * position.
  * Returns undefined when the plan is not found or not yours.
  */
 export async function findPlan(
@@ -324,7 +383,7 @@ export async function insertBlock(
       })
       .returning('*');
     await markPlanUpdated(trx, planId);
-    return toBlock(row, []);
+    return toBlock(row, [], []);
   });
 }
 
@@ -347,7 +406,7 @@ async function findOwnedBlock(
  * Applies a partial update: only the fields present in input change, and an
  * empty input changes nothing. Times are checked against the saved ones,
  * so the block still ends after it starts. Returns:
- * the updated block with its activities: done
+ * the updated block with its activities and annotations: done
  * 'invalid_times': the resulting endMinutes is not after startMinutes
  * undefined: block not found or not yours
  */
@@ -381,10 +440,8 @@ export async function updateBlock(
       await markPlanUpdated(trx, existing.plan_id);
     }
 
-    const activityRows: ActivityRow[] = await trx('activities')
-      .where({ block_id: id })
-      .orderBy('position');
-    return toBlock(row, activityRows.map(toActivity));
+    const { activities, annotations } = await readBlockContents(trx, [id]);
+    return toBlock(row, activities.get(id) ?? [], annotations.get(id) ?? []);
   });
 }
 

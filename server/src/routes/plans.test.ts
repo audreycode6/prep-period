@@ -166,7 +166,7 @@ describe('plans: one teacher', () => {
     });
   });
 
-  it('reads a block with no activities back with an empty activities list', async () => {
+  it('reads a block with no activities or annotations back with activities: [] and annotations: []', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const planId = await createPlan(user.agent);
     const blockId = await addBlock(user.agent, planId, 480, 540);
@@ -175,8 +175,80 @@ describe('plans: one teacher', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.blocks).toEqual([
-      expect.objectContaining({ id: blockId, activities: [] }),
+      expect.objectContaining({ id: blockId, activities: [], annotations: [] }),
     ]);
+  });
+
+  it("reads a block's annotations back in position order, with activityId", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const saved = await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Mini-lesson' }]);
+    const activityId = saved.body[0].id;
+    // set up straight in Postgres, so this test depends only on reading
+    // inserted second-position first, so the order read back can only come
+    // from position
+    await db('annotations').insert({
+      block_id: blockId,
+      activity_id: activityId,
+      type: 'heads_up',
+      text: 'Sam leaves at 9:15',
+      position: 1,
+    });
+    await db('annotations').insert({
+      block_id: blockId,
+      type: 'must_know',
+      text: 'Fire drill at 9:30',
+      position: 0,
+    });
+
+    const res = await user.agent.get(`/api/plans/${planId}`);
+
+    expect(res.body.blocks[0].annotations).toEqual([
+      {
+        id: expect.any(String),
+        activityId: null,
+        type: 'must_know',
+        text: 'Fire drill at 9:30',
+      },
+      {
+        id: expect.any(String),
+        activityId,
+        type: 'heads_up',
+        text: 'Sam leaves at 9:15',
+      },
+    ]);
+  });
+
+  it('reads each block of a plan back with only its own annotations, [] for a block with none', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const mathId = await addBlock(user.agent, planId, 480, 540);
+    const artId = await addBlock(user.agent, planId, 600, 660);
+    const gymId = await addBlock(user.agent, planId, 720, 780);
+    // set up straight in Postgres, so this test depends only on reading
+    await db('annotations').insert([
+      { block_id: artId, type: 'if_time', text: 'Clay if dry', position: 0 },
+      { block_id: mathId, type: 'must_know', text: 'Quiz today', position: 0 },
+    ]);
+
+    const res = await user.agent.get(`/api/plans/${planId}`);
+
+    const textsByBlockId = Object.fromEntries(
+      res.body.blocks.map(
+        (block: { id: string; annotations: { text: string }[] }) => [
+          block.id,
+          block.annotations.map((annotation) => annotation.text),
+        ],
+      ),
+    );
+    expect(textsByBlockId).toEqual({
+      [mathId]: ['Quiz today'],
+      [artId]: ['Clay if dry'],
+      [gymId]: [],
+    });
   });
 
   it('answers 409 on POST with an archived profileId, and creates nothing', async () => {
@@ -349,13 +421,20 @@ describe('plans: one teacher', () => {
     });
   });
 
-  it('deletes a plan with its blocks and activities on DELETE :id', async () => {
+  it('deletes a plan with its blocks, activities and annotations on DELETE :id', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const planId = await createPlan(user.agent);
     const blockId = await addBlock(user.agent, planId, 480, 540);
     await user.agent
       .put(`/api/blocks/${blockId}/activities`)
       .send([{ label: 'Warm-up' }]);
+    // set up straight in Postgres, so this test depends only on the delete
+    await db('annotations').insert({
+      block_id: blockId,
+      type: 'heads_up',
+      text: 'Sam leaves at 9:15',
+      position: 0,
+    });
 
     const res = await user.agent.delete(`/api/plans/${planId}`);
 
@@ -363,6 +442,7 @@ describe('plans: one teacher', () => {
     expect((await user.agent.get(`/api/plans/${planId}`)).status).toBe(404);
     expect(await db('blocks').where({ plan_id: planId })).toEqual([]);
     expect(await activityRows(blockId)).toEqual([]);
+    expect(await db('annotations').where({ block_id: blockId })).toEqual([]);
   });
 
   it('moves the plan to another live profile on PATCH :id', async () => {

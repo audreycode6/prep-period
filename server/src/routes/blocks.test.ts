@@ -163,6 +163,7 @@ describe('blocks: one teacher', () => {
       activity_id: miniLesson.id,
       type: 'heads_up',
       text: 'Sam leaves at 9:15',
+      position: 0,
     });
     const annotationsOn = (activityId: string) =>
       db('annotations').where({ activity_id: activityId });
@@ -302,6 +303,28 @@ describe('blocks: one teacher', () => {
     );
     const after = await user.agent.get(`/api/plans/${planId}`);
     expect(after.body.updatedAt).toBe(before.body.updatedAt);
+  });
+
+  it('returns the block on PATCH :id with its saved annotations, matching the block from GET', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    // set up straight in Postgres, so this test depends only on PATCH
+    await db('annotations').insert({
+      block_id: blockId,
+      type: 'heads_up',
+      text: 'Sam leaves at 9:15',
+      position: 0,
+    });
+
+    const res = await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ title: 'Reading' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.annotations).toHaveLength(1);
+    const plan = await user.agent.get(`/api/plans/${planId}`);
+    expect(res.body).toEqual(plan.body.blocks[0]);
   });
 
   it('reorders the plan by the new times after PATCH :id', async () => {
