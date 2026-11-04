@@ -245,6 +245,22 @@ describe('blocks: one teacher', () => {
     expect(await activityRows(afternoonId)).toEqual(before);
   });
 
+  it("updates the plan's updatedAt on PUT activities", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const planBefore = await user.agent.get(`/api/plans/${planId}`);
+
+    await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Warm-up' }]);
+
+    const planAfter = await user.agent.get(`/api/plans/${planId}`);
+    expect(new Date(planAfter.body.updatedAt).getTime()).toBeGreaterThan(
+      new Date(planBefore.body.updatedAt).getTime(),
+    );
+  });
+
   it("updates the plan's updatedAt on PUT annotations", async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const planId = await createPlan(user.agent);
