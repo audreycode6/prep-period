@@ -543,7 +543,7 @@ export async function replaceActivities(
  * Replaces the block's annotations with incoming, in order: the old ones are
  * deleted and incoming is inserted, each item's index becoming its position.
  * Returns:
- * the saved annotations, by postion: done
+ * the saved annotations, by position: done
  * 'invalid_activity_ids': an activityId isn't one of this block's activities
  * undefined: block not found or not yours
  */
