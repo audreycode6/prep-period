@@ -3,7 +3,12 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { db } from '../db.js';
 import { sessionStore } from '../middleware/session.js';
-import { activityRows, addBlock, createPlan } from '../test/plans.js';
+import {
+  activityRows,
+  addBlock,
+  annotationRows,
+  createPlan,
+} from '../test/plans.js';
 import { teacherWithProfile, twoTeachers } from '../test/teachers.js';
 
 beforeEach(async () => {
@@ -42,6 +47,26 @@ describe('blocks: another teacher', () => {
     expect(await activityRows(blockId)).toEqual(before);
   });
 
+  it("answers 404 on PUT annotations; cannot change another teacher's block", async () => {
+    const { owner, other } = await twoTeachers();
+    const blockId = await addBlock(
+      owner.agent,
+      await createPlan(owner.agent),
+      480,
+      540,
+    );
+    await owner.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([{ type: 'must_know', text: 'Fire drill at 9:30' }]);
+    const before = await annotationRows(blockId);
+    const res = await other.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([]);
+
+    expect(res.status).toBe(404);
+    expect(await annotationRows(blockId)).toEqual(before);
+  });
+
   it("answers 404 on PATCH and DELETE :id; cannot change or delete another teacher's block", async () => {
     const { owner, other } = await twoTeachers();
     const blockId = await addBlock(
@@ -78,6 +103,7 @@ describe('blocks: no session', () => {
       await request(app).patch(`/api/blocks/${randomId}`).send({}),
       await request(app).delete(`/api/blocks/${randomId}`),
       await request(app).put(`/api/blocks/${randomId}/activities`).send([]),
+      await request(app).put(`/api/blocks/${randomId}/annotations`).send([]),
     ];
 
     for (const res of responses) {
@@ -90,7 +116,7 @@ describe('blocks: no session', () => {
  * Tests the rules for a teacher's own blocks
  */
 describe('blocks: one teacher', () => {
-  it('keeps activity ids when the same list is saved twice', async () => {
+  it('keeps activity ids on PUT activities when the same list is saved twice', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(
       user.agent,
@@ -157,12 +183,13 @@ describe('blocks: one teacher', () => {
       .put(`/api/blocks/${blockId}/activities`)
       .send([{ label: 'Warm-up' }, { label: 'Mini-lesson' }]);
     const [warmUp, miniLesson] = first.body;
-    // straight into Postgres: annotations route not built yet
+    // set up straight in Postgres, so this test depends only on saving activities
     await db('annotations').insert({
       block_id: blockId,
       activity_id: miniLesson.id,
       type: 'heads_up',
       text: 'Sam leaves at 9:15',
+      position: 0,
     });
     const annotationsOn = (activityId: string) =>
       db('annotations').where({ activity_id: activityId });
@@ -218,6 +245,38 @@ describe('blocks: one teacher', () => {
     expect(await activityRows(afternoonId)).toEqual(before);
   });
 
+  it("updates the plan's updatedAt on PUT activities", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const planBefore = await user.agent.get(`/api/plans/${planId}`);
+
+    await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Warm-up' }]);
+
+    const planAfter = await user.agent.get(`/api/plans/${planId}`);
+    expect(new Date(planAfter.body.updatedAt).getTime()).toBeGreaterThan(
+      new Date(planBefore.body.updatedAt).getTime(),
+    );
+  });
+
+  it("updates the plan's updatedAt on PUT annotations", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const planBefore = await user.agent.get(`/api/plans/${planId}`);
+
+    await user.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([{ type: 'must_know', text: 'Fire drill at 9:30' }]);
+
+    const planAfter = await user.agent.get(`/api/plans/${planId}`);
+    expect(new Date(planAfter.body.updatedAt).getTime()).toBeGreaterThan(
+      new Date(planBefore.body.updatedAt).getTime(),
+    );
+  });
+
   it("changes only the fields sent on PATCH :id and updates the plan's updatedAt", async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const planId = await createPlan(user.agent);
@@ -245,7 +304,7 @@ describe('blocks: one teacher', () => {
     );
   });
 
-  it('answers 400 on PATCH :id when the new start is after the saved end', async () => {
+  it('answers 400 with fields on PATCH :id when the new start is after the saved end, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(
       user.agent,
@@ -304,6 +363,131 @@ describe('blocks: one teacher', () => {
     expect(after.body.updatedAt).toBe(before.body.updatedAt);
   });
 
+  it('returns the block on PATCH :id with its saved annotations, matching the block from GET', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    // set up straight in Postgres, so this test depends only on PATCH
+    await db('annotations').insert({
+      block_id: blockId,
+      type: 'heads_up',
+      text: 'Sam leaves at 9:15',
+      position: 0,
+    });
+
+    const res = await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ title: 'Reading' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.annotations).toHaveLength(1);
+    const plan = await user.agent.get(`/api/plans/${planId}`);
+    expect(res.body).toEqual(plan.body.blocks[0]);
+  });
+
+  it('saves annotations on PUT annotations with positions in the order sent and activityId null when left out', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const saved = await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Mini-lesson' }]);
+    const activityId = saved.body[0].id;
+
+    const res = await user.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([
+        { activityId, type: 'heads_up', text: 'Sam leaves at 9:15' },
+        { type: 'must_know', text: 'Fire drill at 9:30' },
+      ]);
+
+    // the response: the saved list, activityId null where it was left out
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      {
+        id: expect.any(String),
+        activityId,
+        type: 'heads_up',
+        text: 'Sam leaves at 9:15',
+      },
+      {
+        id: expect.any(String),
+        activityId: null,
+        type: 'must_know',
+        text: 'Fire drill at 9:30',
+      },
+    ]);
+    // the database: positions follow the order sent
+    const rows = await annotationRows(blockId);
+    expect(rows.map((row) => [row.text, row.position])).toEqual([
+      ['Sam leaves at 9:15', 0],
+      ['Fire drill at 9:30', 1],
+    ]);
+
+    // GET returns the same list, and the plan counts as changed
+    const after = await user.agent.get(`/api/plans/${planId}`);
+    expect(after.body.blocks[0].annotations).toEqual(res.body);
+  });
+
+  it('replaces the whole list on PUT annotations: an item left out is deleted, the kept one is renumbered from 0, and [] deletes them all', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const blockId = await addBlock(
+      user.agent,
+      await createPlan(user.agent),
+      480,
+      540,
+    );
+    await user.agent.put(`/api/blocks/${blockId}/annotations`).send([
+      { type: 'must_know', text: 'Fire drill at 9:30' },
+      { type: 'if_time', text: 'Read-aloud chapter 4' },
+    ]);
+
+    const res = await user.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([{ type: 'if_time', text: 'Read-aloud chapter 4' }]);
+
+    expect(res.status).toBe(200);
+    const rows = await annotationRows(blockId);
+    expect(rows.map((row) => [row.text, row.position])).toEqual([
+      ['Read-aloud chapter 4', 0],
+    ]);
+
+    const cleared = await user.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([]);
+    expect(cleared.status).toBe(200);
+    expect(cleared.body).toEqual([]);
+    expect(await annotationRows(blockId)).toEqual([]);
+  });
+
+  it("answers 400 on PUT annotations with another block's activity id, and changes nothing", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const morningBlockId = await addBlock(user.agent, planId, 480, 540);
+    const afternoonBlockId = await addBlock(user.agent, planId, 780, 840);
+    const afternoon = await user.agent
+      .put(`/api/blocks/${afternoonBlockId}/activities`)
+      .send([{ label: 'Afternoon activity' }]);
+    const afternoonActivityId = afternoon.body[0].id;
+    await user.agent
+      .put(`/api/blocks/${morningBlockId}/annotations`)
+      .send([{ type: 'must_know', text: 'Saved morning note' }]);
+    const before = await annotationRows(morningBlockId);
+
+    const res = await user.agent
+      .put(`/api/blocks/${morningBlockId}/annotations`)
+      .send([
+        {
+          activityId: afternoonActivityId,
+          type: 'heads_up',
+          text: 'Morning note on an afternoon activity',
+        },
+      ]);
+
+    expect(res.status).toBe(400);
+    expect(await annotationRows(morningBlockId)).toEqual(before);
+  });
+
   it('reorders the plan by the new times after PATCH :id', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const planId = await createPlan(user.agent);
@@ -336,6 +520,7 @@ describe('blocks: bad input', () => {
       await user.agent.patch('/api/blocks/not-a-uuid').send({ title: 'Math' }),
       await user.agent.delete('/api/blocks/not-a-uuid'),
       await user.agent.put('/api/blocks/not-a-uuid/activities').send([]),
+      await user.agent.put('/api/blocks/not-a-uuid/annotations').send([]),
     ];
 
     for (const res of responses) {
@@ -343,7 +528,7 @@ describe('blocks: bad input', () => {
     }
   });
 
-  it('answers 400 naming each bad field by item index and property', async () => {
+  it('answers 400 on PUT activities naming each bad field by item index and property, and saves nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(
       user.agent,
@@ -363,6 +548,34 @@ describe('blocks: bad input', () => {
       '1.minutes',
     ]);
     expect(await activityRows(blockId)).toEqual([]);
+  });
+
+  it('answers 400 on PUT annotations naming each bad field by item index and property, and saves nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const blockId = await addBlock(
+      user.agent,
+      await createPlan(user.agent),
+      480,
+      540,
+    );
+
+    // item 0 is valid; item 1 has a type outside the four and a blank text;
+    // item 2 has an activityId that isn't a UUID
+    const res = await user.agent
+      .put(`/api/blocks/${blockId}/annotations`)
+      .send([
+        { type: 'must_know', text: 'Fire drill at 9:30' },
+        { type: 'urgent', text: '   ' },
+        { activityId: 'nope', type: 'heads_up', text: 'Sam leaves at 9:15' },
+      ]);
+
+    expect(res.status).toBe(400);
+    expect(Object.keys(res.body.fields).sort()).toEqual([
+      '1.text',
+      '1.type',
+      '2.activityId',
+    ]);
+    expect(await annotationRows(blockId)).toEqual([]);
   });
 
   it('answers 400 with fields on PATCH :id with a bad field, and changes nothing', async () => {

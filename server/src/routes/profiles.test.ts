@@ -177,7 +177,7 @@ describe('profiles: one teacher', () => {
 
   it('answers 409 on DELETE while a plan uses the profile, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
-    // straight into Postgres: plans route not built yet
+    // set up straight in Postgres, so this test depends only on the profile routes
     await db('plans').insert({
       teacher_id: user.teacherId,
       profile_id: user.profileId,
