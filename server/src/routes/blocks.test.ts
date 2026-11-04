@@ -90,7 +90,7 @@ describe('blocks: no session', () => {
  * Tests the rules for a teacher's own blocks
  */
 describe('blocks: one teacher', () => {
-  it('keeps activity ids when the same list is saved twice', async () => {
+  it('keeps activity ids on PUT activities when the same list is saved twice', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(
       user.agent,
@@ -157,7 +157,7 @@ describe('blocks: one teacher', () => {
       .put(`/api/blocks/${blockId}/activities`)
       .send([{ label: 'Warm-up' }, { label: 'Mini-lesson' }]);
     const [warmUp, miniLesson] = first.body;
-    // straight into Postgres: annotations route not built yet
+    // set up straight in Postgres, so this test depends only on saving activities
     await db('annotations').insert({
       block_id: blockId,
       activity_id: miniLesson.id,
@@ -246,7 +246,7 @@ describe('blocks: one teacher', () => {
     );
   });
 
-  it('answers 400 on PATCH :id when the new start is after the saved end', async () => {
+  it('answers 400 with fields on PATCH :id when the new start is after the saved end, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(
       user.agent,
@@ -366,7 +366,7 @@ describe('blocks: bad input', () => {
     }
   });
 
-  it('answers 400 naming each bad field by item index and property', async () => {
+  it('answers 400 on PUT activities naming each bad field by item index and property, and saves nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(
       user.agent,
