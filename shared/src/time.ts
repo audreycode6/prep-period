@@ -42,3 +42,16 @@ export function minutesToDisplay(minutes: number, locale?: string): string {
     timeZone: 'UTC',
   }).format(time);
 }
+
+/**
+ * Formats a duration given in minutes as hours and minutes, showing only the
+ * parts that apply: minutes alone under an hour, hours alone on the hour,
+ * and both otherwise. Expects a whole number of minutes, 0 or more.
+ */
+export function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins} min`;
+  if (mins === 0) return `${hours} hr`;
+  return `${hours} hr ${mins} min`;
+}
