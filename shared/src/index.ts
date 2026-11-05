@@ -28,7 +28,9 @@ export type SignupRequest = {
 
 export type LoginRequest = SignupRequest;
 
-const requiredText = z.string().trim().min(1, "Can't be blank");
+// text a teacher must fill in; spaces alone don't count.
+const requiredText = (field: string) =>
+  z.string().trim().min(1, `${field} is required`);
 
 // text a user may leave out: blank is stored as null, not ""
 const optionalText = z
@@ -38,20 +40,20 @@ const optionalText = z
   .nullable();
 
 export const profileEntrySchema = z.object({
-  label: requiredText,
-  note: requiredText,
+  label: requiredText('Label'),
+  note: requiredText('Note'),
 });
 export type ProfileEntry = z.infer<typeof profileEntrySchema>;
 
 export const contactSchema = z.object({
-  name: requiredText,
-  role: requiredText,
+  name: requiredText('Name'),
+  role: requiredText('Role'),
   reach: z.string().trim().default(''),
 });
 export type Contact = z.infer<typeof contactSchema>;
 
 export const profileFieldsSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(255),
+  name: requiredText('Name').max(255),
   isDefault: z.boolean(),
   schoolInfo: z.array(profileEntrySchema),
   contacts: z.array(contactSchema),
@@ -94,7 +96,7 @@ const minutesOfDay = z
   .lt(MINUTES_PER_DAY, TIME_OF_DAY_MESSAGE);
 
 export const planFieldsSchema = z.object({
-  title: requiredText.max(255),
+  title: requiredText('Title').max(255),
   date: z.iso.date().nullable(),
   todayNote: optionalText,
   // omitted on create: the server uses the teacher's default profile
@@ -114,7 +116,7 @@ export type PlanCreateRequest = z.input<typeof planCreateSchema>;
 export type PlanUpdate = z.infer<typeof planUpdateSchema>;
 
 export const blockFieldsSchema = z.object({
-  title: requiredText.max(255),
+  title: requiredText('Title').max(255),
   description: optionalText,
   startMinutes: minutesOfDay,
   endMinutes: minutesOfDay,
@@ -131,15 +133,15 @@ export type BlockUpdate = z.infer<typeof blockUpdateSchema>;
 // what a client sends: description may be left out
 export type BlockCreateRequest = z.input<typeof blockCreateSchema>;
 
-export const activityStepSchema = z.object({ text: requiredText });
+export const activityStepSchema = z.object({ text: requiredText('Step') });
 export type ActivityStep = z.infer<typeof activityStepSchema>;
 
 export const activityFieldsSchema = z.object({
-  label: requiredText,
+  label: requiredText('Activity name'),
   steps: z.array(activityStepSchema),
   minutes: z
     .int('Minutes must be a whole number')
-    .positive('Minutes must be above 0')
+    .positive('Minutes must be 1 or more, or left empty for flexible')
     .nullable(), // null = flexible
 });
 
@@ -172,7 +174,7 @@ export const annotationFieldsSchema = z.object({
   // null = the whole block; set, one of the block's activities
   activityId: z.uuid().nullable(),
   type: annotationTypeSchema,
-  text: requiredText,
+  text: requiredText('Annotation text'),
 });
 
 // One annotation as sent in a block's annotation list: a missing activityId

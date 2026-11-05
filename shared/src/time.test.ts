@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatDuration,
   minutesToDisplay,
   minutesToTimeInput,
   timeInputToMinutes,
@@ -59,5 +60,23 @@ describe('minutesToDisplay', () => {
   it("formats in the given locale's style, not a fixed one", () => {
     expect(display(797, 'en-GB')).toBe('13:17');
     expect(display(480, 'en-GB')).toBe('8:00');
+  });
+});
+
+describe('formatDuration', () => {
+  it('shows minutes alone under an hour', () => {
+    expect(formatDuration(0)).toBe('0 min');
+    expect(formatDuration(45)).toBe('45 min');
+    expect(formatDuration(59)).toBe('59 min');
+  });
+
+  it('shows hours alone on the hour', () => {
+    expect(formatDuration(60)).toBe('1 hr');
+    expect(formatDuration(120)).toBe('2 hr');
+  });
+
+  it('shows hours and minutes past the hour', () => {
+    expect(formatDuration(75)).toBe('1 hr 15 min');
+    expect(formatDuration(121)).toBe('2 hr 1 min');
   });
 });

@@ -40,12 +40,10 @@ describe('activityMinutesOverBlockLength', () => {
   // 9:00 to 9:45, a 45-minute block
   const times = { startMinutes: 540, endMinutes: 585 };
 
-  it('returns both totals when the activities run over the block', () => {
+  it('returns how many minutes the activities run over the block', () => {
+    // 50 minute activities duration -- over block limit
     const block = { ...times, activities: [{ minutes: 30 }, { minutes: 20 }] };
-    expect(activityMinutesOverBlockLength(block)).toEqual({
-      activityMinutes: 50,
-      blockMinutes: 45,
-    });
+    expect(activityMinutesOverBlockLength(block)).toBe(5);
   });
 
   it('returns null when the activities exactly fill the block', () => {

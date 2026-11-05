@@ -26,18 +26,16 @@ export function overlappingBlockIds(
 
 /**
  * Compares the total of a block's activity minutes with the block's length.
- * Activities with null minutes are flexible and count as 0. Returns both
- * totals when the activities run over the block, and null when they fit.
+ * Activities with null minutes are flexible and count as 0. Returns how many
+ * minutes the activities run over the block, or null when they fit.
  */
 export function activityMinutesOverBlockLength(
   block: TimeSpan & { activities: Pick<Activity, 'minutes'>[] },
-): { activityMinutes: number; blockMinutes: number } | null {
+): number | null {
   const blockMinutes = block.endMinutes - block.startMinutes;
   const activityMinutes = block.activities.reduce(
     (total, activity) => total + (activity.minutes ?? 0),
     0,
   );
-  return activityMinutes > blockMinutes
-    ? { activityMinutes, blockMinutes }
-    : null;
+  return activityMinutes > blockMinutes ? activityMinutes - blockMinutes : null;
 }

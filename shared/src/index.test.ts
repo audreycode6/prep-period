@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   activityInputSchema,
+  activityStepSchema,
+  annotationInputSchema,
   blockCreateSchema,
   blockUpdateSchema,
   planUpdateSchema,
@@ -19,11 +21,30 @@ function firstValidationMessage(
 }
 
 describe('messages for input that stops a save', () => {
-  it('rejects required text that is empty or only spaces as blank', () => {
+  it('rejects an activity name that is empty or only spaces, naming the field in the message', () => {
     for (const label of ['', '   ']) {
       expect(firstValidationMessage(activityInputSchema, { label })).toBe(
-        "Can't be blank",
+        'Activity name is required',
       );
+    }
+  });
+
+  it('names the field in the message for each kind of required text', () => {
+    const cases: [z.ZodType, unknown, string][] = [
+      [
+        blockCreateSchema,
+        { title: '  ', startMinutes: 540, endMinutes: 600 },
+        'Title is required',
+      ],
+      [activityStepSchema, { text: '  ' }, 'Step is required'],
+      [
+        annotationInputSchema,
+        { type: 'heads_up', text: '  ' },
+        'Annotation text is required',
+      ],
+    ];
+    for (const [schema, input, message] of cases) {
+      expect(firstValidationMessage(schema, input)).toBe(message);
     }
   });
 
@@ -36,14 +57,14 @@ describe('messages for input that stops a save', () => {
     ).toBe('Minutes must be a whole number');
   });
 
-  it('rejects zero or negative activity minutes as not above 0', () => {
+  it('rejects zero or negative activity minutes as less than 1', () => {
     for (const minutes of [0, -5]) {
       expect(
         firstValidationMessage(activityInputSchema, {
           label: 'Warm-up',
           minutes,
         }),
-      ).toBe('Minutes must be above 0');
+      ).toBe('Minutes must be 1 or more, or left empty for flexible');
     }
   });
 
