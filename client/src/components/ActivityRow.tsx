@@ -32,6 +32,7 @@ export function ActivityRow({
     <li>
       <input
         aria-label="Activity"
+        placeholder="Cool Activity Name"
         value={draft.label}
         onChange={(e) => onChange({ label: e.target.value })}
       />
@@ -41,6 +42,7 @@ export function ActivityRow({
           type="number"
           min={1}
           step={1}
+          placeholder="Leave empty if flexible"
           value={draft.minutesText}
           onChange={(e) => onChange({ minutesText: e.target.value })}
         />
@@ -48,7 +50,7 @@ export function ActivityRow({
       <label>
         Steps
         <textarea
-          placeholder="Press Enter to start a new step"
+          placeholder="Press Enter to separate steps"
           value={draft.stepsText}
           onChange={(e) => onChange({ stepsText: e.target.value })}
         />
