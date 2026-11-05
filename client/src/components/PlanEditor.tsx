@@ -10,6 +10,7 @@ import { errorMessage } from '../api/client';
 import { addBlock, deletePlan, getPlan } from '../api/plans';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 import { PlanBlock } from './PlanBlock';
+import { ProfileSelect } from './ProfileSelect';
 import { joinWithAnd, pluralize } from '../text';
 import { TodayNote } from './TodayNote';
 
@@ -17,7 +18,7 @@ type Props = { planId: string; onClose: () => void };
 
 /**
  * Editor for one plan: renders its blocks and activities, edits the plan's
- * today-note, adds and deletes blocks, edits one block's title, description
+ * profile and today-note, adds and deletes blocks, edits one block's title, description
  * and times at a time, and deletes the plan. Marks each block that overlaps
  * another, as a warning that doesn't stop saving. Refetches the plan after
  * each block change so blocks stay sorted by start time.
@@ -147,10 +148,8 @@ export function PlanEditor({ planId, onClose }: Props) {
           </button>
           <h3>Add a block</h3>
           <BlockForm submitLabel="Add block" onSubmit={handleAdd} />
-          <p>
-            {plan.date && `${plan.date} · `}
-            {plan.profile.name}
-          </p>
+          {plan.date && <p>{plan.date}</p>}
+          <ProfileSelect plan={plan} onSaved={setPlan} />
           <TodayNote
             planId={plan.id}
             todayNote={plan.todayNote}
