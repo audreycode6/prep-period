@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  minutesToDisplay,
   overlappingBlockIds,
   type Block,
   type BlockUpdate,
@@ -9,8 +8,8 @@ import {
 import { deleteBlock, updateBlock } from '../api/blocks';
 import { errorMessage } from '../api/client';
 import { addBlock, deletePlan, getPlan } from '../api/plans';
-import { BlockActivities } from './BlockActivities';
 import { BlockForm, type BlockFormValues } from './BlockForm';
+import { PlanBlock } from './PlanBlock';
 import { TodayNote } from './TodayNote';
 
 type Props = { planId: string; onClose: () => void };
@@ -160,45 +159,16 @@ export function PlanEditor({ planId, onClose }: Props) {
           ) : (
             <ol>
               {plan.blocks.map((block) => (
-                <li key={block.id}>
-                  {editingBlockId === block.id ? (
-                    <BlockForm
-                      blockToEdit={block}
-                      submitLabel="Save block"
-                      onSubmit={(values) => handleEdit(block, values)}
-                      onCancel={() => setEditingBlockId(null)}
-                    />
-                  ) : (
-                    <>
-                      <h3>
-                        {minutesToDisplay(block.startMinutes)}–
-                        {minutesToDisplay(block.endMinutes)} {block.title}
-                      </h3>
-                      {overlappingIds.has(block.id) && (
-                        <p>Overlaps another block</p>
-                      )}
-                      {block.description && <p>{block.description}</p>}
-                      <button
-                        type="button"
-                        onClick={() => setEditingBlockId(block.id)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteBlock(block)}
-                      >
-                        Delete block
-                      </button>
-                    </>
-                  )}
-                  <BlockActivities
-                    blockId={block.id}
-                    activities={block.activities}
-                    startMinutes={block.startMinutes}
-                    endMinutes={block.endMinutes}
-                  />
-                </li>
+                <PlanBlock
+                  key={block.id}
+                  block={block}
+                  isEditing={editingBlockId === block.id}
+                  overlaps={overlappingIds.has(block.id)}
+                  onEdit={() => setEditingBlockId(block.id)}
+                  onCancelEdit={() => setEditingBlockId(null)}
+                  onSave={(values) => handleEdit(block, values)}
+                  onDelete={() => handleDeleteBlock(block)}
+                />
               ))}
             </ol>
           )}
