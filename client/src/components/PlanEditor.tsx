@@ -10,6 +10,7 @@ import { errorMessage } from '../api/client';
 import { addBlock, deletePlan, getPlan } from '../api/plans';
 import { BlockActivities } from './BlockActivities';
 import { BlockForm, type BlockFormValues } from './BlockForm';
+import { TodayNote } from './TodayNote';
 
 type Props = { planId: string; onClose: () => void };
 
@@ -21,9 +22,10 @@ function pluralize(count: number, singular: string, plural: string): string {
 }
 
 /**
- * Editor for one plan: renders its blocks and activities, adds and deletes
- * blocks, edits one block's title and times at a time, and deletes the plan.
- * Refetches the plan after each change so blocks stay sorted by start time.
+ * Editor for one plan: renders its blocks and activities, edits the plan's
+ * today-note, adds and deletes blocks, edits one block's title, description
+ * and times at a time, and deletes the plan. Refetches the plan after each
+ * block change so blocks stay sorted by start time.
  */
 export function PlanEditor({ planId, onClose }: Props) {
   // null until the first load answers
@@ -59,6 +61,9 @@ export function PlanEditor({ planId, onClose }: Props) {
   async function handleEdit(block: Block, values: BlockFormValues) {
     const changes: BlockUpdate = {};
     if (values.title.trim() !== block.title) changes.title = values.title;
+    // a blank field and a saved null both mean no description
+    if ((values.description ?? '').trim() !== (block.description ?? ''))
+      changes.description = values.description;
     if (values.startMinutes !== block.startMinutes)
       changes.startMinutes = values.startMinutes;
     if (values.endMinutes !== block.endMinutes)
@@ -138,6 +143,11 @@ export function PlanEditor({ planId, onClose }: Props) {
             {plan.date && `${plan.date} · `}
             {plan.profile.name}
           </p>
+          <TodayNote
+            planId={plan.id}
+            todayNote={plan.todayNote}
+            onSaved={setPlan}
+          />
           {plan.blocks.length === 0 ? (
             <p>No blocks yet.</p>
           ) : (
@@ -157,6 +167,7 @@ export function PlanEditor({ planId, onClose }: Props) {
                         {minutesToDisplay(block.startMinutes)}–
                         {minutesToDisplay(block.endMinutes)} {block.title}
                       </h3>
+                      {block.description && <p>{block.description}</p>}
                       <button
                         type="button"
                         onClick={() => setEditingBlockId(block.id)}

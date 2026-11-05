@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
-import { activityInputSchema, blockCreateSchema } from './index.js';
+import {
+  activityInputSchema,
+  blockCreateSchema,
+  blockUpdateSchema,
+  planUpdateSchema,
+} from './index.js';
 
 /**
  * Parses `input` with `schema` and returns the message of
@@ -61,5 +66,26 @@ describe('messages for input that stops a save', () => {
         startMinutes: 540.5,
       }),
     ).toBe('Time must be a whole number of minutes');
+  });
+});
+
+describe('today-note and block description', () => {
+  it('turns empty or whitespace-only text into null', () => {
+    for (const blank of ['', '   ']) {
+      expect(planUpdateSchema.parse({ todayNote: blank }).todayNote).toBeNull();
+      expect(
+        blockUpdateSchema.parse({ description: blank }).description,
+      ).toBeNull();
+    }
+  });
+
+  it('keeps text that is not blank, trimmed', () => {
+    expect(
+      planUpdateSchema.parse({ todayNote: '  Fire drill at 10  ' }).todayNote,
+    ).toBe('Fire drill at 10');
+    expect(
+      blockUpdateSchema.parse({ description: '  Bring the read-aloud book ' })
+        .description,
+    ).toBe('Bring the read-aloud book');
   });
 });

@@ -30,6 +30,13 @@ export type LoginRequest = SignupRequest;
 
 const requiredText = z.string().trim().min(1, "Can't be blank");
 
+// text a user may leave out: blank is stored as null, not ""
+const optionalText = z
+  .string()
+  .trim()
+  .transform((text) => (text === '' ? null : text))
+  .nullable();
+
 export const profileEntrySchema = z.object({
   label: requiredText,
   note: requiredText,
@@ -89,7 +96,7 @@ const minutesOfDay = z
 export const planFieldsSchema = z.object({
   title: requiredText.max(255),
   date: z.iso.date().nullable(),
-  todayNote: z.string().trim().nullable(),
+  todayNote: optionalText,
   // omitted on create: the server uses the teacher's default profile
   profileId: z.uuid().optional(),
 });
@@ -108,7 +115,7 @@ export type PlanUpdate = z.infer<typeof planUpdateSchema>;
 
 export const blockFieldsSchema = z.object({
   title: requiredText.max(255),
-  description: z.string().trim().nullable(),
+  description: optionalText,
   startMinutes: minutesOfDay,
   endMinutes: minutesOfDay,
 });

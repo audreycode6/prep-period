@@ -8,7 +8,7 @@ import { errorMessage } from '../api/client';
 
 export type BlockFormValues = Pick<
   Block,
-  'title' | 'startMinutes' | 'endMinutes'
+  'title' | 'description' | 'startMinutes' | 'endMinutes'
 >;
 
 type Props = {
@@ -20,11 +20,11 @@ type Props = {
 };
 
 /**
- * Form for a block's title and times, used both to add a block and to edit
- * one. With `blockToEdit` it starts from that block's values; without it, it
- * starts empty and clears after each submit. Submit stays disabled until the
- * title is filled and the end is after the start, and an error thrown by
- * `onSubmit` shows under the form.
+ * Form for a block's title, description and times, used both to add a block
+ * and to edit one. With `blockToEdit` it starts from that block's values;
+ * without it, it starts empty and clears after each submit. Submit stays
+ * disabled until the title is filled and the end is after the start, and an
+ * error thrown by `onSubmit` shows under the form.
  */
 export function BlockForm({
   blockToEdit,
@@ -33,6 +33,9 @@ export function BlockForm({
   onCancel,
 }: Props) {
   const [title, setTitle] = useState(blockToEdit?.title ?? '');
+  const [description, setDescription] = useState(
+    blockToEdit?.description ?? '',
+  );
   // the time inputs' values as the browser reports them: "HH:MM" (24-hour)
   // once a whole time is entered, and "" while empty or half-filled
   const [start, setStart] = useState(
@@ -63,9 +66,10 @@ export function BlockForm({
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ title, startMinutes, endMinutes });
+      await onSubmit({ title, description, startMinutes, endMinutes });
       if (!blockToEdit) {
         setTitle('');
+        setDescription('');
         setStart('');
         setEnd('');
       }
@@ -84,6 +88,13 @@ export function BlockForm({
           value={title}
           maxLength={255}
           onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
+      <label>
+        Description
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
         />
       </label>
       <label>
