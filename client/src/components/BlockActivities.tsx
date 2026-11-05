@@ -8,18 +8,7 @@ import {
 } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
 import { saveActivities } from '../api/blocks';
-
-// One activity's fields in the list while it's being edited. `key` identifies
-// the row on screen, for React and for finding the draft to change, since a
-// new activity has no `id` until it's saved. Minutes and steps hold the text
-// as typed into their fields.
-type ActivityDraft = {
-  key: string;
-  id?: string;
-  label: string;
-  minutesText: string;
-  stepsText: string; // one step per line
-};
+import { ActivityRow, type ActivityDraft } from './ActivityRow';
 
 type Props = {
   blockId: string;
@@ -77,15 +66,19 @@ export function BlockActivities({
   // true while a save is in flight, so a double click can't send it twice
   const [saving, setSaving] = useState(false);
 
-  const inputs = drafts.map(toInput);
-  const problems = inputs.map(
-    (input) => activityInputSchema.safeParse(input).error?.issues[0]?.message,
+  const activitiesToSave = drafts.map(toInput);
+  const validationMessages = activitiesToSave.map(
+    (activity) =>
+      activityInputSchema.safeParse(activity).error?.issues[0]?.message,
   );
-  const canSave = !saving && problems.every((problem) => problem === undefined);
+  const canSave =
+    !saving && validationMessages.every((message) => message === undefined);
   const minutesOver = activityMinutesOverBlockLength({
     startMinutes,
     endMinutes,
-    activities: inputs.map((input) => ({ minutes: input.minutes ?? null })),
+    activities: activitiesToSave.map((activity) => ({
+      minutes: activity.minutes ?? null,
+    })),
   });
 
   function updateDraft(key: string, changes: Partial<ActivityDraft>) {
@@ -107,11 +100,28 @@ export function BlockActivities({
     setDrafts((current) => current.filter((draft) => draft.key !== key));
   }
 
+  /**
+   * Removes the draft, asking first when it's a saved activity or has steps,
+   * and naming the steps when there are some. A new activity with no steps is
+   * removed without asking. Cancel keeps it.
+   */
+  function confirmRemove(draft: ActivityDraft) {
+    const hasSteps = draft.stepsText.trim() !== '';
+    if (draft.id === undefined && !hasSteps) {
+      removeDraft(draft.key);
+      return;
+    }
+    const stepsNote = hasSteps ? ' and its steps' : '';
+    if (window.confirm(`Remove this activity${stepsNote}?`)) {
+      removeDraft(draft.key);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setError(null);
     try {
-      setDrafts(toDrafts(await saveActivities(blockId, inputs)));
+      setDrafts(toDrafts(await saveActivities(blockId, activitiesToSave)));
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -126,40 +136,13 @@ export function BlockActivities({
       ) : (
         <ul>
           {drafts.map((draft, index) => (
-            <li key={draft.key}>
-              <input
-                aria-label="Activity"
-                value={draft.label}
-                onChange={(e) =>
-                  updateDraft(draft.key, { label: e.target.value })
-                }
-              />
-              <label>
-                Minutes
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={draft.minutesText}
-                  onChange={(e) =>
-                    updateDraft(draft.key, { minutesText: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                Steps, one per line
-                <textarea
-                  value={draft.stepsText}
-                  onChange={(e) =>
-                    updateDraft(draft.key, { stepsText: e.target.value })
-                  }
-                />
-              </label>
-              <button type="button" onClick={() => removeDraft(draft.key)}>
-                Remove
-              </button>
-              {problems[index] && <p>{problems[index]}</p>}
-            </li>
+            <ActivityRow
+              key={draft.key}
+              draft={draft}
+              validationMessage={validationMessages[index]}
+              onChange={(changes) => updateDraft(draft.key, changes)}
+              onRemove={() => confirmRemove(draft)}
+            />
           ))}
         </ul>
       )}
