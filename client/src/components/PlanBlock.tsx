@@ -13,7 +13,8 @@ type Props = {
   onCancelEdit: () => void;
   onSave: (values: BlockFormValues) => Promise<void>;
   onDelete: () => void;
-  onActivitiesSaved: () => void;
+  // called after the block's activities or annotations are saved
+  onContentSaved: () => void;
 };
 
 /**
@@ -30,7 +31,7 @@ export function PlanBlock({
   onCancelEdit,
   onSave,
   onDelete,
-  onActivitiesSaved,
+  onContentSaved,
 }: Props) {
   return (
     <li>
@@ -62,7 +63,8 @@ export function PlanBlock({
         activities={block.activities}
         startMinutes={block.startMinutes}
         endMinutes={block.endMinutes}
-        onSaved={onActivitiesSaved}
+        annotations={block.annotations}
+        onSaved={onContentSaved}
       />
       <BlockAnnotations
         // the key changes when the block's activities change, so
@@ -72,6 +74,7 @@ export function PlanBlock({
         blockId={block.id}
         annotations={block.annotations}
         activities={block.activities}
+        onSaved={onContentSaved}
       />
     </li>
   );

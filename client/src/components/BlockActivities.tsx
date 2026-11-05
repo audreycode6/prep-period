@@ -5,9 +5,11 @@ import {
   formatDuration,
   type Activity,
   type ActivityInputRequest,
+  type Annotation,
 } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
 import { saveActivities } from '../api/blocks';
+import { joinWithAnd, pluralize } from '../text';
 import { ActivityRow, type ActivityDraft } from './ActivityRow';
 
 type Props = {
@@ -15,6 +17,8 @@ type Props = {
   activities: Activity[];
   startMinutes: number;
   endMinutes: number;
+  // the block's saved annotations, to name the ones removed with an activity
+  annotations: Annotation[];
   // called after a save, so the plan can reload what depends on the activities
   onSaved: () => void;
 };
@@ -63,6 +67,7 @@ export function BlockActivities({
   activities,
   startMinutes,
   endMinutes,
+  annotations,
   onSaved,
 }: Props) {
   const [drafts, setDrafts] = useState(() => toDrafts(activities));
@@ -106,8 +111,8 @@ export function BlockActivities({
 
   /**
    * Removes the draft, asking first when it's a saved activity or has steps,
-   * and naming the steps when there are some. A new activity with no steps is
-   * removed without asking. Cancel keeps it.
+   * and naming its steps and annotations when it has some. A new activity
+   * with no steps is removed without asking. Cancel keeps it.
    */
   function confirmRemove(draft: ActivityDraft) {
     const hasSteps = draft.stepsText.trim() !== '';
@@ -115,8 +120,16 @@ export function BlockActivities({
       removeDraft(draft.key);
       return;
     }
-    const stepsNote = hasSteps ? ' and its steps' : '';
-    if (window.confirm(`Remove this activity${stepsNote}?`)) {
+    const annotationCount = annotations.filter(
+      (annotation) => annotation.activityId === draft.id,
+    ).length;
+    const contents = [];
+    if (hasSteps) contents.push('steps');
+    if (annotationCount > 0)
+      contents.push(pluralize(annotationCount, 'annotation', 'annotations'));
+    const contentsNote =
+      contents.length === 0 ? '' : ` and its ${joinWithAnd(contents)}`;
+    if (window.confirm(`Remove this activity${contentsNote}?`)) {
       removeDraft(draft.key);
     }
   }

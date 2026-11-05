@@ -14,6 +14,8 @@ type Props = {
   annotations: Annotation[];
   // the block's saved activities, so an annotation can be tied to one of them
   activities: Activity[];
+  // called after a save, so the plan's copy of the annotations stays current
+  onSaved: () => void;
 };
 
 /**
@@ -46,9 +48,14 @@ function toInput(draft: AnnotationDraft): AnnotationInputRequest {
  * Add, edit and remove a block's annotations, then save them all at once, in
  * the order listed. Save is disabled while any annotation is invalid, and
  * that annotation shows what's wrong. After a save, the rows reload from the
- * saved list.
+ * saved list and `onSaved` is called.
  */
-export function BlockAnnotations({ blockId, annotations, activities }: Props) {
+export function BlockAnnotations({
+  blockId,
+  annotations,
+  activities,
+  onSaved,
+}: Props) {
   const [drafts, setDrafts] = useState(() => toDrafts(annotations));
   const [error, setError] = useState<string | null>(null);
   // true while a save is in flight, so a double click can't send it twice
@@ -107,6 +114,7 @@ export function BlockAnnotations({ blockId, annotations, activities }: Props) {
     setError(null);
     try {
       setDrafts(toDrafts(await saveAnnotations(blockId, annotationsToSave)));
+      onSaved();
     } catch (err) {
       setError(errorMessage(err));
     } finally {

@@ -10,16 +10,10 @@ import { errorMessage } from '../api/client';
 import { addBlock, deletePlan, getPlan } from '../api/plans';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 import { PlanBlock } from './PlanBlock';
+import { joinWithAnd, pluralize } from '../text';
 import { TodayNote } from './TodayNote';
 
 type Props = { planId: string; onClose: () => void };
-
-/**
- * Returns a count with the right form of the word, for the delete confirms
- */
-function pluralize(count: number, singular: string, plural: string): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
 
 /**
  * Editor for one plan: renders its blocks and activities, edits the plan's
@@ -78,15 +72,22 @@ export function PlanEditor({ planId, onClose }: Props) {
   }
 
   /**
-   * Asks for confirmation, naming how many activities will be deleted with
-   * the block, then deletes it and reloads the plan. Cancel does nothing.
+   * Asks for confirmation, naming how many activities and annotations will be
+   * deleted with the block, then deletes it and reloads the plan. Cancel does
+   * nothing.
    */
   async function handleDeleteBlock(block: Block) {
-    const count = block.activities.length;
+    const contents = [];
+    if (block.activities.length > 0)
+      contents.push(
+        pluralize(block.activities.length, 'activity', 'activities'),
+      );
+    if (block.annotations.length > 0)
+      contents.push(
+        pluralize(block.annotations.length, 'annotation', 'annotations'),
+      );
     const cascadeNote =
-      count === 0
-        ? ''
-        : ` and its ${pluralize(count, 'activity', 'activities')}`;
+      contents.length === 0 ? '' : ` and its ${joinWithAnd(contents)}`;
 
     if (!window.confirm(`Delete the "${block.title}" block${cascadeNote}?`)) {
       return;
@@ -102,7 +103,8 @@ export function PlanEditor({ planId, onClose }: Props) {
 
   /**
    * Asks for confirmation, naming how many blocks will be deleted with the
-   * plan, then deletes it and returns to the plan list. Cancel does nothing.
+   * plan, along with their activities and annotations, then deletes it and
+   * returns to the plan list. Cancel does nothing.
    */
   async function handleDeletePlan() {
     if (plan === null) return;
@@ -110,7 +112,7 @@ export function PlanEditor({ planId, onClose }: Props) {
     const cascadeNote =
       count === 0
         ? ''
-        : ` and its ${pluralize(count, 'block', 'blocks')} with their activities`;
+        : ` and its ${pluralize(count, 'block', 'blocks')} with their activities and annotations`;
 
     if (!window.confirm(`Delete the "${plan.title}" plan${cascadeNote}?`)) {
       return;
@@ -168,7 +170,7 @@ export function PlanEditor({ planId, onClose }: Props) {
                   onCancelEdit={() => setEditingBlockId(null)}
                   onSave={(values) => handleEdit(block, values)}
                   onDelete={() => handleDeleteBlock(block)}
-                  onActivitiesSaved={reload}
+                  onContentSaved={reload}
                 />
               ))}
             </ol>
