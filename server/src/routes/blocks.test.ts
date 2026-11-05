@@ -304,6 +304,52 @@ describe('blocks: one teacher', () => {
     );
   });
 
+  it('saves the description sent on POST', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+
+    const res = await user.agent.post(`/api/plans/${planId}/blocks`).send({
+      title: 'Reading',
+      description: 'Bring the read-aloud book',
+      startMinutes: 480,
+      endMinutes: 540,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.description).toBe('Bring the read-aloud book');
+  });
+
+  it('saves a blank description as null on POST', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+
+    const res = await user.agent.post(`/api/plans/${planId}/blocks`).send({
+      title: 'Reading',
+      description: '   ',
+      startMinutes: 480,
+      endMinutes: 540,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.description).toBeNull();
+  });
+
+  it('clears the description to null on PATCH :id when it is sent blank', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ description: 'Bring the read-aloud book' });
+
+    const res = await user.agent
+      .patch(`/api/blocks/${blockId}`)
+      .send({ description: '   ' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.description).toBeNull();
+  });
+
   it('answers 400 with fields on PATCH :id when the new start is after the saved end, and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const blockId = await addBlock(

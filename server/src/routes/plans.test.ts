@@ -485,6 +485,20 @@ describe('plans: one teacher', () => {
     });
   });
 
+  it('clears the today-note to null on PATCH :id when it is sent blank', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const created = await user.agent
+      .post('/api/plans')
+      .send({ title: 'Monday', todayNote: 'Fire drill at 10' });
+
+    const res = await user.agent
+      .patch(`/api/plans/${created.body.id}`)
+      .send({ todayNote: '   ' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.todayNote).toBeNull();
+  });
+
   it('answers 200 on PATCH :id with an empty body and changes nothing', async () => {
     const user = await teacherWithProfile(createApp(), 'user@example.com');
     const planId = await createPlan(user.agent);
