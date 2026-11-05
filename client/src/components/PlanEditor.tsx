@@ -185,6 +185,8 @@ export function PlanEditor({ planId, onClose }: Props) {
                   <BlockActivities
                     blockId={block.id}
                     activities={block.activities}
+                    startMinutes={block.startMinutes}
+                    endMinutes={block.endMinutes}
                   />
                 </li>
               ))}
