@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MINUTES_PER_DAY } from './time.js';
 
 export * from './time.js';
+export * from './validation.js';
 
 export type HealthResponse = {
   status: 'ok';
@@ -27,7 +28,7 @@ export type SignupRequest = {
 
 export type LoginRequest = SignupRequest;
 
-const requiredText = z.string().trim().min(1);
+const requiredText = z.string().trim().min(1, "Can't be blank");
 
 export const profileEntrySchema = z.object({
   label: requiredText,
@@ -79,7 +80,11 @@ export type ClassroomProfileSummary = Pick<
 >;
 
 // minutes since midnight
-const minutesOfDay = z.int().min(0).lt(MINUTES_PER_DAY);
+const TIME_OF_DAY_MESSAGE = 'Time must be between 00:00 and 23:59';
+const minutesOfDay = z
+  .int('Time must be a whole number of minutes')
+  .min(0, TIME_OF_DAY_MESSAGE)
+  .lt(MINUTES_PER_DAY, TIME_OF_DAY_MESSAGE);
 
 export const planFieldsSchema = z.object({
   title: requiredText.max(255),
@@ -125,7 +130,10 @@ export type ActivityStep = z.infer<typeof activityStepSchema>;
 export const activityFieldsSchema = z.object({
   label: requiredText,
   steps: z.array(activityStepSchema),
-  minutes: z.int().positive().nullable(), // null = flexible
+  minutes: z
+    .int('Minutes must be a whole number')
+    .positive('Minutes must be above 0')
+    .nullable(), // null = flexible
 });
 
 // A block's activities are always saved as a whole list. An item with an id
