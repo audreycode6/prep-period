@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   minutesToDisplay,
+  overlappingBlockIds,
   type Block,
   type BlockUpdate,
   type Plan,
@@ -24,8 +25,9 @@ function pluralize(count: number, singular: string, plural: string): string {
 /**
  * Editor for one plan: renders its blocks and activities, edits the plan's
  * today-note, adds and deletes blocks, edits one block's title, description
- * and times at a time, and deletes the plan. Refetches the plan after each
- * block change so blocks stay sorted by start time.
+ * and times at a time, and deletes the plan. Marks each block that overlaps
+ * another, as a warning that doesn't stop saving. Refetches the plan after
+ * each block change so blocks stay sorted by start time.
  */
 export function PlanEditor({ planId, onClose }: Props) {
   // null until the first load answers
@@ -123,6 +125,11 @@ export function PlanEditor({ planId, onClose }: Props) {
     }
   }
 
+  // ids of the blocks whose times overlap another block's
+  const overlappingIds = plan
+    ? overlappingBlockIds(plan.blocks)
+    : new Set<string>();
+
   return (
     <section>
       <button type="button" onClick={onClose}>
@@ -167,6 +174,9 @@ export function PlanEditor({ planId, onClose }: Props) {
                         {minutesToDisplay(block.startMinutes)}–
                         {minutesToDisplay(block.endMinutes)} {block.title}
                       </h3>
+                      {overlappingIds.has(block.id) && (
+                        <p>Overlaps another block</p>
+                      )}
                       {block.description && <p>{block.description}</p>}
                       <button
                         type="button"
