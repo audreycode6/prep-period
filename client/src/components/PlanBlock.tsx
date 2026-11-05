@@ -1,5 +1,6 @@
 import { minutesToDisplay, type Block } from '@prep-period/shared';
 import { BlockActivities } from './BlockActivities';
+import { BlockAnnotations } from './BlockAnnotations';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 
 type Props = {
@@ -12,12 +13,14 @@ type Props = {
   onCancelEdit: () => void;
   onSave: (values: BlockFormValues) => Promise<void>;
   onDelete: () => void;
+  onActivitiesSaved: () => void;
 };
 
 /**
  * One block in a plan: its times, title, description and a warning when its
  * time overlaps another block's, with Edit and Delete buttons, or its edit
- * form while it's being edited. Its activities show below either way.
+ * form while it's being edited. Its activities and annotations show below
+ * either way.
  */
 export function PlanBlock({
   block,
@@ -27,6 +30,7 @@ export function PlanBlock({
   onCancelEdit,
   onSave,
   onDelete,
+  onActivitiesSaved,
 }: Props) {
   return (
     <li>
@@ -58,6 +62,16 @@ export function PlanBlock({
         activities={block.activities}
         startMinutes={block.startMinutes}
         endMinutes={block.endMinutes}
+        onSaved={onActivitiesSaved}
+      />
+      <BlockAnnotations
+        // the key changes when the block's activities change, so
+        // the annotation list reloads from what's saved and keeps
+        // only annotations on activities that still exist
+        key={block.activities.map((activity) => activity.id).join()}
+        blockId={block.id}
+        annotations={block.annotations}
+        activities={block.activities}
       />
     </li>
   );

@@ -15,6 +15,8 @@ type Props = {
   activities: Activity[];
   startMinutes: number;
   endMinutes: number;
+  // called after a save, so the plan can reload what depends on the activities
+  onSaved: () => void;
 };
 
 /**
@@ -53,13 +55,15 @@ function toInput(draft: ActivityDraft): ActivityInputRequest {
  * at once. Save is disabled while any activity is invalid, and that activity
  * shows what's wrong. A warning shows, without stopping the save, when the
  * activities' minutes add up to more than the block. After a save, the rows
- * reload from the saved list, so new activities have their ids.
+ * reload from the saved list, so new activities have their ids, and
+ * `onSaved` is called.
  */
 export function BlockActivities({
   blockId,
   activities,
   startMinutes,
   endMinutes,
+  onSaved,
 }: Props) {
   const [drafts, setDrafts] = useState(() => toDrafts(activities));
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +126,7 @@ export function BlockActivities({
     setError(null);
     try {
       setDrafts(toDrafts(await saveActivities(blockId, activitiesToSave)));
+      onSaved();
     } catch (err) {
       setError(errorMessage(err));
     } finally {

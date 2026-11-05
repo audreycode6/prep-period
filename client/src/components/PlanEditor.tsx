@@ -168,6 +168,7 @@ export function PlanEditor({ planId, onClose }: Props) {
                   onCancelEdit={() => setEditingBlockId(null)}
                   onSave={(values) => handleEdit(block, values)}
                   onDelete={() => handleDeleteBlock(block)}
+                  onActivitiesSaved={reload}
                 />
               ))}
             </ol>
