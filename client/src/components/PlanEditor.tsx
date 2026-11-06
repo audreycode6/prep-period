@@ -7,23 +7,35 @@ import {
 } from '@prep-period/shared';
 import { deleteBlock, updateBlock } from '../api/blocks';
 import { errorMessage } from '../api/client';
-import { addBlock, deletePlan, getPlan } from '../api/plans';
+import { addBlock, deletePlan, getPlan, updatePlan } from '../api/plans';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 import { PlanBlock } from './PlanBlock';
 import { ProfileSelect } from './ProfileSelect';
 import { joinWithAnd, pluralize } from '../text';
 import { TodayNote } from './TodayNote';
 
-type Props = { planId: string; onClose: () => void };
+type Props = {
+  planId: string;
+  onClose: () => void;
+  onEditProfile: (profileId: string) => void;
+  onNewProfile: () => void;
+  // a profile just created from this plan, which the plan moves onto
+  newProfileId?: string;
+};
 
 /**
- * Editor for one plan: renders its blocks and activities, edits the plan's
- * profile and today-note, adds and deletes blocks, edits one block's title, description
- * and times at a time, and deletes the plan. Marks each block that overlaps
- * another, as a warning that doesn't stop saving. Refetches the plan after
- * each block change so blocks stay sorted by start time.
+ * Editor for one plan: its profile, today-note and blocks, with their
+ * activities and annotations. Back to plans, and deleting the plan, call
+ * `onClose`; the profile buttons call `onEditProfile` and `onNewProfile`.
+ * Given `newProfileId`, moves the plan onto that profile as it loads.
  */
-export function PlanEditor({ planId, onClose }: Props) {
+export function PlanEditor({
+  planId,
+  onClose,
+  onEditProfile,
+  onNewProfile,
+  newProfileId,
+}: Props) {
   // null until the first load answers
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +43,12 @@ export function PlanEditor({ planId, onClose }: Props) {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
 
   useEffect(() => {
-    getPlan(planId)
-      .then(setPlan)
-      .catch((err: unknown) => setError(errorMessage(err)));
-  }, [planId]);
+    const load =
+      newProfileId === undefined
+        ? getPlan(planId)
+        : updatePlan(planId, { profileId: newProfileId });
+    load.then(setPlan).catch((err: unknown) => setError(errorMessage(err)));
+  }, [planId, newProfileId]);
 
   async function reload() {
     try {
@@ -149,7 +163,19 @@ export function PlanEditor({ planId, onClose }: Props) {
           <h3>Add a block</h3>
           <BlockForm submitLabel="Add block" onSubmit={handleAdd} />
           {plan.date && <p>{plan.date}</p>}
-          <ProfileSelect plan={plan} onSaved={setPlan} />
+          <ProfileSelect
+            plan={plan}
+            onSaved={setPlan}
+            onNewProfile={onNewProfile}
+          />
+          {!plan.profile.isArchived && (
+            <button
+              type="button"
+              onClick={() => onEditProfile(plan.profile.id)}
+            >
+              Edit profile
+            </button>
+          )}
           <TodayNote
             planId={plan.id}
             todayNote={plan.todayNote}

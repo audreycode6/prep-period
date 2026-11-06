@@ -7,14 +7,20 @@ import { getProfiles } from '../api/profiles';
 type Props = {
   plan: Plan;
   onSaved: (plan: Plan) => void;
+  onNewProfile: () => void;
 };
 
+// the value of the option that opens a new profile,
+// which onChange checks to open the form
+const NEW_PROFILE = 'new';
+
 /**
- * A dropdown of the teacher's live profiles, set to the plan's profile.
- * Choosing one saves it to the plan and hands the updated plan to `onSaved`.
- * When the plan's profile is archived, it is listed but can't be chosen.
+ * A dropdown of the teacher's live profiles and an option to create a new
+ * one, set to the plan's profile. Choosing a profile saves it to the plan and
+ * hands the updated plan to `onSaved`; choosing to create one calls
+ * `onNewProfile`. An archived plan profile is listed but can't be chosen.
  */
-export function ProfileSelect({ plan, onSaved }: Props) {
+export function ProfileSelect({ plan, onSaved, onNewProfile }: Props) {
   // null while the profile list loads, so loading and an empty list differ
   const [profiles, setProfiles] = useState<ClassroomProfileSummary[] | null>(
     null,
@@ -53,7 +59,11 @@ export function ProfileSelect({ plan, onSaved }: Props) {
         <select
           value={plan.profile.id}
           disabled={profiles === null || saving}
-          onChange={(e) => handleChange(e.target.value)}
+          onChange={(e) =>
+            e.target.value === NEW_PROFILE
+              ? onNewProfile()
+              : handleChange(e.target.value)
+          }
         >
           {/* archived, or the list hasn't loaded:
               show it so the select isn't blank */}
@@ -66,8 +76,10 @@ export function ProfileSelect({ plan, onSaved }: Props) {
           {liveProfiles.map((profile) => (
             <option key={profile.id} value={profile.id}>
               {profile.name}
+              {profile.isDefault && ' (default)'}
             </option>
           ))}
+          <option value={NEW_PROFILE}>New classroom profile...</option>
         </select>
       </label>
       {error && <p role="alert">{error}</p>}
