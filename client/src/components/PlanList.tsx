@@ -3,13 +3,17 @@ import type { PlanSummary } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
 import { createPlan, getPlans } from '../api/plans';
 
-type Props = { onOpen: (planId: string) => void };
+type Props = {
+  onOpen: (planId: string) => void;
+  onNewProfile: () => void;
+};
 
 /**
  * Lists the teacher's plans with their profile and opens one when its title is
  * clicked. Creates a new plan on the default profile from a title and opens it.
+ * New profile calls `onNewProfile`.
  */
-export function PlanList({ onOpen }: Props) {
+export function PlanList({ onOpen, onNewProfile }: Props) {
   // null until the first load answers, so loading and an empty list differ
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +43,9 @@ export function PlanList({ onOpen }: Props) {
   return (
     <section>
       <h2>Plans</h2>
+      <button type="button" onClick={onNewProfile}>
+        New classroom profile
+      </button>
       <form onSubmit={handleCreate}>
         <label>
           Title

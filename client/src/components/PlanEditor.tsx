@@ -14,16 +14,21 @@ import { ProfileSelect } from './ProfileSelect';
 import { joinWithAnd, pluralize } from '../text';
 import { TodayNote } from './TodayNote';
 
-type Props = { planId: string; onClose: () => void };
+type Props = {
+  planId: string;
+  onClose: () => void;
+  onEditProfile: (profileId: string) => void;
+};
 
 /**
  * Editor for one plan: renders its blocks and activities, edits the plan's
- * profile and today-note, adds and deletes blocks, edits one block's title, description
+ * profile and today-note, opens the profile for editing unless it's archived,
+ * adds and deletes blocks, edits one block's title, description
  * and times at a time, and deletes the plan. Marks each block that overlaps
  * another, as a warning that doesn't stop saving. Refetches the plan after
  * each block change so blocks stay sorted by start time.
  */
-export function PlanEditor({ planId, onClose }: Props) {
+export function PlanEditor({ planId, onClose, onEditProfile }: Props) {
   // null until the first load answers
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +155,14 @@ export function PlanEditor({ planId, onClose }: Props) {
           <BlockForm submitLabel="Add block" onSubmit={handleAdd} />
           {plan.date && <p>{plan.date}</p>}
           <ProfileSelect plan={plan} onSaved={setPlan} />
+          {!plan.profile.isArchived && (
+            <button
+              type="button"
+              onClick={() => onEditProfile(plan.profile.id)}
+            >
+              Edit profile
+            </button>
+          )}
           <TodayNote
             planId={plan.id}
             todayNote={plan.todayNote}
