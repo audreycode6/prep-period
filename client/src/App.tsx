@@ -1,70 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { Teacher } from '@prep-period/shared';
+import { ApiError, errorMessage } from './api/client';
+import { getCurrentTeacher } from './api/auth';
+import { AuthForm } from './components/AuthForm';
 import { HealthStatus } from './components/HealthStatus';
-import { PlanEditor } from './components/PlanEditor';
-import { PlanList } from './components/PlanList';
-import { ProfileForm } from './components/ProfileForm';
+import { SignedInApp } from './components/SignedInApp';
 
-// the page App shows, with what that page needs to open
-type Page =
-  | { kind: 'planList' }
-  | { kind: 'planEditor'; planId: string; newProfileId?: string }
-  | { kind: 'profileForm'; profileId: string | null; returnTo: Page };
-
-/**
- * The page the profile form returns to after saving. A profile created from
- * a plan returns to that plan, now using the new profile.
- */
-function pageAfterProfileSave(
-  form: Extract<Page, { kind: 'profileForm' }>,
-  savedProfileId: string,
-): Page {
-  if (form.profileId === null && form.returnTo.kind === 'planEditor') {
-    return { ...form.returnTo, newProfileId: savedProfileId };
-  }
-  return form.returnTo;
-}
+// who is signed in, as far as the server has answered
+type Auth =
+  | { kind: 'checkingSession' }
+  | { kind: 'signedOut' }
+  | { kind: 'signedIn'; teacher: Teacher }
+  // the session check failed for a reason other than no one being signed in
+  | { kind: 'sessionCheckFailed'; error: string };
 
 export default function App() {
-  const [page, setPage] = useState<Page>({ kind: 'planList' });
+  const [auth, setAuth] = useState<Auth>({ kind: 'checkingSession' });
+
+  useEffect(() => {
+    getCurrentTeacher()
+      .then((teacher) => setAuth({ kind: 'signedIn', teacher }))
+      .catch((err: unknown) =>
+        setAuth(
+          err instanceof ApiError && err.status === 401
+            ? { kind: 'signedOut' }
+            : { kind: 'sessionCheckFailed', error: errorMessage(err) },
+        ),
+      );
+  }, []);
 
   return (
     <main>
       <h1>Prep Period</h1>
       <HealthStatus />
-      {page.kind === 'planList' && (
-        <PlanList
-          onOpen={(planId) => setPage({ kind: 'planEditor', planId })}
-          onNewProfile={() =>
-            setPage({
-              kind: 'profileForm',
-              profileId: null,
-              returnTo: page,
-            })
-          }
+      {auth.kind === 'checkingSession' && <p>Checking sign-in...</p>}
+      {auth.kind === 'sessionCheckFailed' && <p role="alert">{auth.error}</p>}
+      {auth.kind === 'signedOut' && (
+        <AuthForm
+          onSignedIn={(teacher) => setAuth({ kind: 'signedIn', teacher })}
         />
       )}
-      {page.kind === 'planEditor' && (
-        <PlanEditor
-          planId={page.planId}
-          newProfileId={page.newProfileId}
-          onClose={() => setPage({ kind: 'planList' })}
-          onEditProfile={(profileId) =>
-            setPage({ kind: 'profileForm', profileId, returnTo: page })
-          }
-          onNewProfile={() =>
-            setPage({
-              kind: 'profileForm',
-              profileId: null,
-              returnTo: { kind: 'planEditor', planId: page.planId },
-            })
-          }
-        />
-      )}
-      {page.kind === 'profileForm' && (
-        <ProfileForm
-          profileId={page.profileId}
-          onSaved={(profile) => setPage(pageAfterProfileSave(page, profile.id))}
-          onClose={() => setPage(page.returnTo)}
+      {auth.kind === 'signedIn' && (
+        <SignedInApp
+          teacher={auth.teacher}
+          onSignedOut={() => setAuth({ kind: 'signedOut' })}
         />
       )}
     </main>
