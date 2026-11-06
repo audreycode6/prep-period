@@ -1,7 +1,8 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
-import type { PlanSummary } from '@prep-period/shared';
+import type { ClassroomProfileSummary, PlanSummary } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
 import { createPlan, getPlans } from '../api/plans';
+import { getProfiles } from '../api/profiles';
 
 type Props = {
   onOpen: (planId: string) => void;
@@ -9,13 +10,18 @@ type Props = {
 };
 
 /**
- * Lists the teacher's plans with their profile and opens one when its title is
- * clicked. Creates a new plan on the default profile from a title and opens it.
- * New profile calls `onNewProfile`.
+ * The teacher's plans, and a form to create one. Opening a plan, or creating
+ * one, calls `onOpen` with its id; the new profile button calls
+ * `onNewProfile`. With no live profiles, it asks for a profile instead of
+ * offering a new plan.
  */
 export function PlanList({ onOpen, onNewProfile }: Props) {
   // null until the first load answers, so loading and an empty list differ
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
+  // null while the profile list loads
+  const [profiles, setProfiles] = useState<ClassroomProfileSummary[] | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   // true while a create is in flight, so a double click can't make two plans
@@ -24,6 +30,9 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
   useEffect(() => {
     getPlans()
       .then(setPlans)
+      .catch((err: unknown) => setError(errorMessage(err)));
+    getProfiles()
+      .then(setProfiles)
       .catch((err: unknown) => setError(errorMessage(err)));
   }, []);
 
@@ -46,19 +55,25 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
       <button type="button" onClick={onNewProfile}>
         New classroom profile
       </button>
-      <form onSubmit={handleCreate}>
-        <label>
-          Title
-          <input
-            value={title}
-            maxLength={255}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </label>
-        <button type="submit" disabled={creating || title.trim() === ''}>
-          New plan
-        </button>
-      </form>
+      {profiles?.length === 0 ? (
+        <p>
+          Every plan uses a classroom profile. Create one to start planning.
+        </p>
+      ) : (
+        <form onSubmit={handleCreate}>
+          <label>
+            Title
+            <input
+              value={title}
+              maxLength={255}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </label>
+          <button type="submit" disabled={creating || title.trim() === ''}>
+            New plan
+          </button>
+        </form>
+      )}
       {error && <p role="alert">{error}</p>}
       {plans === null ? (
         !error && <p>Loading plans...</p>
