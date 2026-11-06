@@ -86,7 +86,7 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
   useEffect(() => {
     const load =
       profileId === null
-        ? // a new profile: count the live ones for the default rule, start blank
+        ? // a new profile: count live profiles for the default rule, start blank
           getProfiles().then((profiles) => {
             setHasNoLiveProfiles(profiles.length === 0);
             setDraft(toDraft(null));
@@ -191,11 +191,14 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
         </label>
         {nameMessage && <p>{nameMessage}</p>}
         {profile === null && hasNoLiveProfiles ? (
-          <p>This will be your default profile, until others are created.</p>
-        ) : profile?.isDefault ? (
           <p>
             This will be your default profile. You can choose another once you
             have more than one.
+          </p>
+        ) : profile?.isDefault ? (
+          <p>
+            This is your default profile. To change that, make another profile
+            the default.
           </p>
         ) : (
           <label>
