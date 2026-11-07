@@ -3,6 +3,7 @@ import type { ClassroomProfileSummary, Plan } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
 import { updatePlan } from '../api/plans';
 import { getProfiles } from '../api/profiles';
+import { useRequest } from '../hooks/useRequest';
 
 type Props = {
   plan: Plan;
@@ -25,26 +26,17 @@ export function ProfileSelect({ plan, onSaved, onNewProfile }: Props) {
   const [profiles, setProfiles] = useState<ClassroomProfileSummary[] | null>(
     null,
   );
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight
-  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { pending: saving, error: saveError, run } = useRequest();
 
   useEffect(() => {
     getProfiles()
       .then(setProfiles)
-      .catch((err: unknown) => setError(errorMessage(err)));
+      .catch((err: unknown) => setLoadError(errorMessage(err)));
   }, []);
 
-  async function handleChange(profileId: string) {
-    setSaving(true);
-    setError(null);
-    try {
-      onSaved(await updatePlan(plan.id, { profileId }));
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSaving(false);
-    }
+  function handleChange(profileId: string) {
+    return run(async () => onSaved(await updatePlan(plan.id, { profileId })));
   }
 
   const liveProfiles = profiles ?? [];
@@ -82,7 +74,8 @@ export function ProfileSelect({ plan, onSaved, onNewProfile }: Props) {
           <option value={NEW_PROFILE}>New classroom profile...</option>
         </select>
       </label>
-      {error && <p role="alert">{error}</p>}
+      {loadError && <p role="alert">{loadError}</p>}
+      {saveError && <p role="alert">{saveError}</p>}
     </div>
   );
 }

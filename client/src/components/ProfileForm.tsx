@@ -14,6 +14,7 @@ import {
   getProfiles,
   updateProfile,
 } from '../api/profiles';
+import { useRequest } from '../hooks/useRequest';
 import { ContactList, type ContactDraft } from './ContactList';
 import { ProfileEntryList, type EntryDraft } from './ProfileEntryList';
 
@@ -79,9 +80,8 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
   // a teacher's only live profile is their default; with more than one,
   // they choose which
   const [hasNoLiveProfiles, setHasNoLiveProfiles] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight
-  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { pending: saving, error: saveError, run } = useRequest();
 
   useEffect(() => {
     const load =
@@ -96,7 +96,7 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
             setProfile(saved);
             setDraft(toDraft(saved));
           });
-    load.catch((err: unknown) => setError(errorMessage(err)));
+    load.catch((err: unknown) => setLoadError(errorMessage(err)));
   }, [profileId]);
 
   if (draft === null) {
@@ -105,7 +105,11 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
         <button type="button" onClick={onClose}>
           Cancel
         </button>
-        {error ? <p role="alert">{error}</p> : <p>Loading profile...</p>}
+        {loadError ? (
+          <p role="alert">{loadError}</p>
+        ) : (
+          <p>Loading profile...</p>
+        )}
       </section>
     );
   }
@@ -144,8 +148,6 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
   async function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (draft === null) return;
-    setSaving(true);
-    setError(null);
     const fields = {
       name: draft.name,
       schoolInfo: toEntries(draft.schoolInfo),
@@ -155,7 +157,7 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
       classroomNotes: toEntries(draft.classroomNotes),
       studentNotes: toEntries(draft.studentNotes),
     };
-    try {
+    await run(async () => {
       const saved =
         profile === null
           ? await createProfile({ ...fields, isDefault: draft.isDefault })
@@ -166,10 +168,7 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
                 : { ...fields, isDefault: draft.isDefault },
             );
       onSaved(saved);
-    } catch (err) {
-      setError(errorMessage(err));
-      setSaving(false);
-    }
+    });
   }
 
   return (
@@ -240,7 +239,7 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
           Save profile
         </button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {saveError && <p role="alert">{saveError}</p>}
     </section>
   );
 }
