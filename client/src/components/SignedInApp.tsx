@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Teacher } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
 import { logout } from '../api/auth';
+import { useRequest } from '../hooks/useRequest';
 import { PlanEditor } from './PlanEditor';
 import { PlanList } from './PlanList';
 import { ProfileForm } from './ProfileForm';
@@ -37,19 +37,13 @@ function pageAfterProfileSave(
  */
 export function SignedInApp({ teacher, onSignedOut }: Props) {
   const [page, setPage] = useState<Page>({ kind: 'planList' });
-  const [error, setError] = useState<string | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
+  const { pending: signingOut, error, run } = useRequest();
 
-  async function handleSignOut() {
-    setSigningOut(true);
-    setError(null);
-    try {
+  function handleSignOut() {
+    return run(async () => {
       await logout();
       onSignedOut();
-    } catch (err) {
-      setError(errorMessage(err));
-      setSigningOut(false);
-    }
+    });
   }
 
   return (

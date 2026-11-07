@@ -2,10 +2,23 @@ import { useState, type SubmitEvent } from 'react';
 import type { Teacher } from '@prep-period/shared';
 import { ApiError, errorMessage } from '../api/client';
 import { login, signup } from '../api/auth';
+import { useRequest } from '../hooks/useRequest';
 
 type Props = {
   onSignedIn: (teacher: Teacher) => void;
 };
+
+/**
+ * The server's reason for refusing a sign-in or new account, when it gave
+ * one; otherwise the usual error message.
+ */
+function refusalMessage(err: unknown): string {
+  // errorMessage reports every 401 as not signed in; here a 401 is a wrong
+  // email or password
+  return err instanceof ApiError && err.body
+    ? err.body.error
+    : errorMessage(err);
+}
 
 /**
  * A form that signs a teacher in, or creates an account, with an email and
@@ -16,37 +29,29 @@ export function AuthForm({ onSignedIn }: Props) {
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  // true while a request is in flight, so a double click can't send it twice
-  const [submitting, setSubmitting] = useState(false);
+  const {
+    pending: submitting,
+    error,
+    run,
+    clearError,
+  } = useRequest(refusalMessage);
 
   const canSubmit = !submitting && email !== '' && password !== '';
 
   async function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
+    await run(async () => {
       const credentials = { email, password };
       const teacher = isCreatingAccount
         ? await signup(credentials)
         : await login(credentials);
       onSignedIn(teacher);
-    } catch (err) {
-      // errorMessage reports every 401 as not signed in; here a 401 is a
-      // wrong email or password
-      setError(
-        err instanceof ApiError && err.body
-          ? err.body.error
-          : errorMessage(err),
-      );
-      setSubmitting(false);
-    }
+    });
   }
 
   function toggleCreatingAccount() {
     setIsCreatingAccount(!isCreatingAccount);
-    setError(null);
+    clearError();
   }
 
   return (

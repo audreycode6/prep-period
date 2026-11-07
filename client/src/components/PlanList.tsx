@@ -3,6 +3,7 @@ import type { ClassroomProfileSummary, PlanSummary } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
 import { createPlan, getPlans } from '../api/plans';
 import { getProfiles } from '../api/profiles';
+import { useRequest } from '../hooks/useRequest';
 
 type Props = {
   onOpen: (planId: string) => void;
@@ -22,31 +23,25 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
   const [profiles, setProfiles] = useState<ClassroomProfileSummary[] | null>(
     null,
   );
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
-  // true while a create is in flight, so a double click can't make two plans
-  const [creating, setCreating] = useState(false);
+  const { pending: creating, error: createError, run } = useRequest();
 
   useEffect(() => {
     getPlans()
       .then(setPlans)
-      .catch((err: unknown) => setError(errorMessage(err)));
+      .catch((err: unknown) => setLoadError(errorMessage(err)));
     getProfiles()
       .then(setProfiles)
-      .catch((err: unknown) => setError(errorMessage(err)));
+      .catch((err: unknown) => setLoadError(errorMessage(err)));
   }, []);
 
   async function handleCreate(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
-    setCreating(true);
-    setError(null);
-    try {
+    await run(async () => {
       const plan = await createPlan({ title });
       onOpen(plan.id);
-    } catch (err) {
-      setError(errorMessage(err));
-      setCreating(false);
-    }
+    });
   }
 
   return (
@@ -74,9 +69,10 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
           </button>
         </form>
       )}
-      {error && <p role="alert">{error}</p>}
+      {createError && <p role="alert">{createError}</p>}
+      {loadError && <p role="alert">{loadError}</p>}
       {plans === null ? (
-        !error && <p>Loading plans...</p>
+        !loadError && <p>Loading plans...</p>
       ) : plans.length === 0 ? (
         <p>No plans yet.</p>
       ) : (
