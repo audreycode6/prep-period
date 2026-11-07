@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Plan } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
 import { updatePlan } from '../api/plans';
+import { useRequest } from '../hooks/useRequest';
 
 type Props = {
   planId: string;
@@ -15,20 +15,12 @@ type Props = {
  */
 export function TodayNote({ planId, todayNote, onSaved }: Props) {
   const [note, setNote] = useState(todayNote ?? '');
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight, so a double click can't send it twice
-  const [saving, setSaving] = useState(false);
+  const { pending: saving, error, run } = useRequest();
 
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      onSaved(await updatePlan(planId, { todayNote: note }));
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSaving(false);
-    }
+  function handleSave() {
+    return run(async () =>
+      onSaved(await updatePlan(planId, { todayNote: note })),
+    );
   }
 
   return (

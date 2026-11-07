@@ -4,7 +4,7 @@ import {
   timeInputToMinutes,
   type Block,
 } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
+import { useRequest } from '../hooks/useRequest';
 
 export type BlockFormValues = Pick<
   Block,
@@ -44,9 +44,7 @@ export function BlockForm({
   const [end, setEnd] = useState(
     blockToEdit ? minutesToTimeInput(blockToEdit.endMinutes) : '',
   );
-  const [error, setError] = useState<string | null>(null);
-  // true while a submit is in flight, so a double click can't send it twice
-  const [submitting, setSubmitting] = useState(false);
+  const { pending: submitting, error, run } = useRequest();
 
   const startMinutes = timeInputToMinutes(start);
   const endMinutes = timeInputToMinutes(end);
@@ -63,9 +61,7 @@ export function BlockForm({
     e.preventDefault();
     if (!isValid) return;
 
-    setSubmitting(true);
-    setError(null);
-    try {
+    await run(async () => {
       await onSubmit({ title, description, startMinutes, endMinutes });
       if (!blockToEdit) {
         setTitle('');
@@ -73,11 +69,7 @@ export function BlockForm({
         setStart('');
         setEnd('');
       }
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (

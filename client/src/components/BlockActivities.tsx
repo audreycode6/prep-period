@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   activityInputSchema,
   activityMinutesOverBlockLength,
@@ -7,8 +6,8 @@ import {
   type ActivityInputRequest,
   type Annotation,
 } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
 import { saveActivities } from '../api/blocks';
+import { useDraftList } from '../hooks/useDraftList';
 import { joinWithAnd, pluralize } from '../text';
 import { ActivityRow, type ActivityDraft } from './ActivityRow';
 
@@ -70,43 +69,31 @@ export function BlockActivities({
   annotations,
   onSaved,
 }: Props) {
-  const [drafts, setDrafts] = useState(() => toDrafts(activities));
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight, so a double click can't send it twice
-  const [saving, setSaving] = useState(false);
-
-  const activitiesToSave = drafts.map(toInput);
-  const validationMessages = activitiesToSave.map(
-    (activity) =>
+  const list = useDraftList({
+    initialDrafts: toDrafts(activities),
+    toInput,
+    validate: (activity) =>
       activityInputSchema.safeParse(activity).error?.issues[0]?.message,
-  );
-  const canSave =
-    !saving && validationMessages.every((message) => message === undefined);
+    saveInputs: async (inputs) =>
+      toDrafts(await saveActivities(blockId, inputs)),
+    onSaved,
+  });
+
   const minutesOver = activityMinutesOverBlockLength({
     startMinutes,
     endMinutes,
-    activities: activitiesToSave.map((activity) => ({
+    activities: list.inputs.map((activity) => ({
       minutes: activity.minutes ?? null,
     })),
   });
 
-  function updateDraft(key: string, changes: Partial<ActivityDraft>) {
-    setDrafts((current) =>
-      current.map((draft) =>
-        draft.key === key ? { ...draft, ...changes } : draft,
-      ),
-    );
-  }
-
   function addDraft() {
-    setDrafts((current) => [
-      ...current,
-      { key: crypto.randomUUID(), label: '', minutesText: '', stepsText: '' },
-    ]);
-  }
-
-  function removeDraft(key: string) {
-    setDrafts((current) => current.filter((draft) => draft.key !== key));
+    list.add({
+      key: crypto.randomUUID(),
+      label: '',
+      minutesText: '',
+      stepsText: '',
+    });
   }
 
   /**
@@ -117,7 +104,7 @@ export function BlockActivities({
   function confirmRemove(draft: ActivityDraft) {
     const hasSteps = draft.stepsText.trim() !== '';
     if (draft.id === undefined && !hasSteps) {
-      removeDraft(draft.key);
+      list.remove(draft.key);
       return;
     }
     const annotationCount = annotations.filter(
@@ -130,35 +117,22 @@ export function BlockActivities({
     const contentsNote =
       contents.length === 0 ? '' : ` and its ${joinWithAnd(contents)}`;
     if (window.confirm(`Remove this activity${contentsNote}?`)) {
-      removeDraft(draft.key);
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      setDrafts(toDrafts(await saveActivities(blockId, activitiesToSave)));
-      onSaved();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSaving(false);
+      list.remove(draft.key);
     }
   }
 
   return (
     <div>
-      {drafts.length === 0 ? (
+      {list.drafts.length === 0 ? (
         <p>No activities yet.</p>
       ) : (
         <ul>
-          {drafts.map((draft, index) => (
+          {list.drafts.map((draft, index) => (
             <ActivityRow
               key={draft.key}
               draft={draft}
-              validationMessage={validationMessages[index]}
-              onChange={(changes) => updateDraft(draft.key, changes)}
+              validationMessage={list.validationMessages[index]}
+              onChange={(changes) => list.update(draft.key, changes)}
               onRemove={() => confirmRemove(draft)}
             />
           ))}
@@ -170,10 +144,10 @@ export function BlockActivities({
       <button type="button" onClick={addDraft}>
         Add activity
       </button>
-      <button type="button" disabled={!canSave} onClick={handleSave}>
+      <button type="button" disabled={!list.canSave} onClick={list.save}>
         Save activities
       </button>
-      {error && <p role="alert">{error}</p>}
+      {list.error && <p role="alert">{list.error}</p>}
     </div>
   );
 }
