@@ -1,34 +1,39 @@
 import { useState } from 'react';
 import type { Plan } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
 import { updatePlan } from '../api/plans';
+import {
+  useReportUnsavedChanges,
+  type OnUnsavedChange,
+} from '../hooks/unsavedChanges';
+import { useRequest } from '../hooks/useRequest';
 
 type Props = {
   planId: string;
   todayNote: string | null;
   onSaved: (plan: Plan) => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 /**
  * Edits the plan's just-for-today note, saves it on Save note, and hands the
  * updated plan to `onSaved`.
  */
-export function TodayNote({ planId, todayNote, onSaved }: Props) {
+export function TodayNote({
+  planId,
+  todayNote,
+  onSaved,
+  onUnsavedChange,
+}: Props) {
   const [note, setNote] = useState(todayNote ?? '');
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight, so a double click can't send it twice
-  const [saving, setSaving] = useState(false);
+  const { pending: saving, error, run } = useRequest();
 
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      onSaved(await updatePlan(planId, { todayNote: note }));
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSaving(false);
-    }
+  const hasUnsavedChanges = note.trim() !== (todayNote ?? '');
+  useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
+
+  function handleSave() {
+    return run(async () =>
+      onSaved(await updatePlan(planId, { todayNote: note })),
+    );
   }
 
   return (

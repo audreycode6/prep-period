@@ -5,6 +5,7 @@ import {
   profileFieldsSchema,
   type ClassroomProfile,
   type Contact,
+  type ProfileCreate,
   type ProfileEntry,
 } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
@@ -14,6 +15,11 @@ import {
   getProfiles,
   updateProfile,
 } from '../api/profiles';
+import {
+  useReportUnsavedChanges,
+  type OnUnsavedChange,
+} from '../hooks/unsavedChanges';
+import { useRequest } from '../hooks/useRequest';
 import { ContactList, type ContactDraft } from './ContactList';
 import { ProfileEntryList, type EntryDraft } from './ProfileEntryList';
 
@@ -22,6 +28,7 @@ type Props = {
   profileId: string | null;
   onSaved: (profile: ClassroomProfile) => void;
   onClose: () => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 // the form's fields while they're being edited
@@ -67,11 +74,32 @@ function toDraft(profile: ClassroomProfile | null): ProfileDraft {
 }
 
 /**
+ * Converts a draft into the fields Save sends, without the rows' keys.
+ */
+function toFields(draft: ProfileDraft): ProfileCreate {
+  return {
+    name: draft.name,
+    isDefault: draft.isDefault,
+    schoolInfo: toEntries(draft.schoolInfo),
+    contacts: draft.contacts.map(
+      ({ name, role, reach }): Contact => ({ name, role, reach }),
+    ),
+    classroomNotes: toEntries(draft.classroomNotes),
+    studentNotes: toEntries(draft.studentNotes),
+  };
+}
+
+/**
  * A form that creates a classroom profile, or edits the one `profileId`
  * names. Save stays disabled until every field is valid. Hands the saved
  * profile to `onSaved`; Cancel calls `onClose`.
  */
-export function ProfileForm({ profileId, onSaved, onClose }: Props) {
+export function ProfileForm({
+  profileId,
+  onSaved,
+  onClose,
+  onUnsavedChange,
+}: Props) {
   // the profile being edited, or null for a new one
   const [profile, setProfile] = useState<ClassroomProfile | null>(null);
   // null until the load answers
@@ -79,9 +107,8 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
   // a teacher's only live profile is their default; with more than one,
   // they choose which
   const [hasNoLiveProfiles, setHasNoLiveProfiles] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight
-  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { pending: saving, error: saveError, run } = useRequest();
 
   useEffect(() => {
     const load =
@@ -96,8 +123,14 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
             setProfile(saved);
             setDraft(toDraft(saved));
           });
-    load.catch((err: unknown) => setError(errorMessage(err)));
+    load.catch((err: unknown) => setLoadError(errorMessage(err)));
   }, [profileId]);
+
+  const hasUnsavedChanges =
+    draft !== null &&
+    JSON.stringify(toFields(draft)) !==
+      JSON.stringify(toFields(toDraft(profile)));
+  useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
 
   if (draft === null) {
     return (
@@ -105,7 +138,11 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
         <button type="button" onClick={onClose}>
           Cancel
         </button>
-        {error ? <p role="alert">{error}</p> : <p>Loading profile...</p>}
+        {loadError ? (
+          <p role="alert">{loadError}</p>
+        ) : (
+          <p>Loading profile...</p>
+        )}
       </section>
     );
   }
@@ -144,32 +181,21 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
   async function handleSubmit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     if (draft === null) return;
-    setSaving(true);
-    setError(null);
-    const fields = {
-      name: draft.name,
-      schoolInfo: toEntries(draft.schoolInfo),
-      contacts: draft.contacts.map(
-        ({ name, role, reach }): Contact => ({ name, role, reach }),
-      ),
-      classroomNotes: toEntries(draft.classroomNotes),
-      studentNotes: toEntries(draft.studentNotes),
-    };
-    try {
-      const saved =
-        profile === null
-          ? await createProfile({ ...fields, isDefault: draft.isDefault })
-          : await updateProfile(
-              profile.id,
-              draft.isDefault === profile.isDefault
-                ? fields
-                : { ...fields, isDefault: draft.isDefault },
-            );
-      onSaved(saved);
-    } catch (err) {
-      setError(errorMessage(err));
-      setSaving(false);
-    }
+    const fields = toFields(draft);
+    await run(async () => {
+      if (profile === null) {
+        onSaved(await createProfile(fields));
+        return;
+      }
+      // isDefault goes only when it changed
+      const { isDefault, ...rest } = fields;
+      onSaved(
+        await updateProfile(
+          profile.id,
+          isDefault === profile.isDefault ? rest : fields,
+        ),
+      );
+    });
   }
 
   return (
@@ -240,7 +266,7 @@ export function ProfileForm({ profileId, onSaved, onClose }: Props) {
           Save profile
         </button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {saveError && <p role="alert">{saveError}</p>}
     </section>
   );
 }

@@ -1,12 +1,12 @@
-import { useState } from 'react';
 import {
   annotationInputSchema,
   type Activity,
   type Annotation,
   type AnnotationInputRequest,
 } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
 import { saveAnnotations } from '../api/blocks';
+import type { OnUnsavedChange } from '../hooks/unsavedChanges';
+import { useDraftList } from '../hooks/useDraftList';
 import { AnnotationRow, type AnnotationDraft } from './AnnotationRow';
 
 type Props = {
@@ -16,6 +16,7 @@ type Props = {
   activities: Activity[];
   // called after a save, so the plan's copy of the annotations stays current
   onSaved: () => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 /**
@@ -55,42 +56,26 @@ export function BlockAnnotations({
   annotations,
   activities,
   onSaved,
+  onUnsavedChange,
 }: Props) {
-  const [drafts, setDrafts] = useState(() => toDrafts(annotations));
-  const [error, setError] = useState<string | null>(null);
-  // true while a save is in flight, so a double click can't send it twice
-  const [saving, setSaving] = useState(false);
-
-  const annotationsToSave = drafts.map(toInput);
-  const validationMessages = annotationsToSave.map(
-    (annotation) =>
+  const list = useDraftList({
+    initialDrafts: toDrafts(annotations),
+    toInput,
+    validate: (annotation) =>
       annotationInputSchema.safeParse(annotation).error?.issues[0]?.message,
-  );
-  const canSave =
-    !saving && validationMessages.every((message) => message === undefined);
-
-  function updateDraft(key: string, changes: Partial<AnnotationDraft>) {
-    setDrafts((current) =>
-      current.map((draft) =>
-        draft.key === key ? { ...draft, ...changes } : draft,
-      ),
-    );
-  }
+    saveInputs: async (inputs) =>
+      toDrafts(await saveAnnotations(blockId, inputs)),
+    onSaved,
+    onUnsavedChange,
+  });
 
   function addDraft() {
-    setDrafts((current) => [
-      ...current,
-      {
-        key: crypto.randomUUID(),
-        activityId: '',
-        type: 'good_to_know',
-        text: '',
-      },
-    ]);
-  }
-
-  function removeDraft(key: string) {
-    setDrafts((current) => current.filter((draft) => draft.key !== key));
+    list.add({
+      key: crypto.randomUUID(),
+      activityId: '',
+      type: 'good_to_know',
+      text: '',
+    });
   }
 
   /**
@@ -101,40 +86,27 @@ export function BlockAnnotations({
   function confirmRemove(draft: AnnotationDraft) {
     const hasText = draft.text.trim() !== '';
     if (draft.id === undefined && !hasText) {
-      removeDraft(draft.key);
+      list.remove(draft.key);
       return;
     }
     if (window.confirm('Remove this annotation?')) {
-      removeDraft(draft.key);
-    }
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    setError(null);
-    try {
-      setDrafts(toDrafts(await saveAnnotations(blockId, annotationsToSave)));
-      onSaved();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSaving(false);
+      list.remove(draft.key);
     }
   }
 
   return (
     <div>
-      {drafts.length === 0 ? (
+      {list.drafts.length === 0 ? (
         <p>No annotations yet.</p>
       ) : (
         <ul>
-          {drafts.map((draft, index) => (
+          {list.drafts.map((draft, index) => (
             <AnnotationRow
               key={draft.key}
               draft={draft}
               activities={activities}
-              validationMessage={validationMessages[index]}
-              onChange={(changes) => updateDraft(draft.key, changes)}
+              validationMessage={list.validationMessages[index]}
+              onChange={(changes) => list.update(draft.key, changes)}
               onRemove={() => confirmRemove(draft)}
             />
           ))}
@@ -143,10 +115,10 @@ export function BlockAnnotations({
       <button type="button" onClick={addDraft}>
         Add annotation
       </button>
-      <button type="button" disabled={!canSave} onClick={handleSave}>
+      <button type="button" disabled={!list.canSave} onClick={list.save}>
         Save annotations
       </button>
-      {error && <p role="alert">{error}</p>}
+      {list.error && <p role="alert">{list.error}</p>}
     </div>
   );
 }
