@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import {
+  useReportUnsavedChanges,
+  type OnUnsavedChange,
+} from './unsavedChanges';
 import { useRequest } from './useRequest';
 
 type Options<Draft extends { key: string }, Input> = {
@@ -10,6 +14,7 @@ type Options<Draft extends { key: string }, Input> = {
   // saves the inputs, in order, and returns drafts of what was saved
   saveInputs: (inputs: Input[]) => Promise<Draft[]>;
   onSaved: () => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 /**
@@ -24,14 +29,22 @@ export function useDraftList<Draft extends { key: string }, Input>({
   validate,
   saveInputs,
   onSaved,
+  onUnsavedChange,
 }: Options<Draft, Input>) {
   const [drafts, setDrafts] = useState(initialDrafts);
+  // what was last saved, as it would be sent, to compare the drafts against
+  const [savedInputs, setSavedInputs] = useState(() =>
+    initialDrafts.map(toInput),
+  );
   const { pending: saving, error, run } = useRequest();
 
   const inputs = drafts.map(toInput);
   const validationMessages = inputs.map(validate);
   const canSave =
     !saving && validationMessages.every((message) => message === undefined);
+  const hasUnsavedChanges =
+    JSON.stringify(inputs) !== JSON.stringify(savedInputs);
+  useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
 
   function update(key: string, changes: Partial<Draft>) {
     setDrafts((current) =>
@@ -51,7 +64,9 @@ export function useDraftList<Draft extends { key: string }, Input>({
 
   function save() {
     return run(async () => {
-      setDrafts(await saveInputs(inputs));
+      const savedDrafts = await saveInputs(inputs);
+      setDrafts(savedDrafts);
+      setSavedInputs(savedDrafts.map(toInput));
       onSaved();
     });
   }
