@@ -7,6 +7,7 @@ import {
   type Annotation,
 } from '@prep-period/shared';
 import { saveActivities } from '../api/blocks';
+import type { OnUnsavedChange } from '../hooks/unsavedChanges';
 import { useDraftList } from '../hooks/useDraftList';
 import { joinWithAnd, pluralize } from '../text';
 import { ActivityRow, type ActivityDraft } from './ActivityRow';
@@ -20,6 +21,7 @@ type Props = {
   annotations: Annotation[];
   // called after a save, so the plan can reload what depends on the activities
   onSaved: () => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 /**
@@ -68,6 +70,7 @@ export function BlockActivities({
   endMinutes,
   annotations,
   onSaved,
+  onUnsavedChange,
 }: Props) {
   const list = useDraftList({
     initialDrafts: toDrafts(activities),
@@ -77,6 +80,7 @@ export function BlockActivities({
     saveInputs: async (inputs) =>
       toDrafts(await saveActivities(blockId, inputs)),
     onSaved,
+    onUnsavedChange,
   });
 
   const minutesOver = activityMinutesOverBlockLength({

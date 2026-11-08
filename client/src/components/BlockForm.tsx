@@ -4,6 +4,10 @@ import {
   timeInputToMinutes,
   type Block,
 } from '@prep-period/shared';
+import {
+  useReportUnsavedChanges,
+  type OnUnsavedChange,
+} from '../hooks/unsavedChanges';
 import { useRequest } from '../hooks/useRequest';
 
 export type BlockFormValues = Pick<
@@ -17,6 +21,7 @@ type Props = {
   submitLabel: string;
   onSubmit: (values: BlockFormValues) => Promise<void>;
   onCancel?: () => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 /**
@@ -31,20 +36,31 @@ export function BlockForm({
   submitLabel,
   onSubmit,
   onCancel,
+  onUnsavedChange,
 }: Props) {
-  const [title, setTitle] = useState(blockToEdit?.title ?? '');
-  const [description, setDescription] = useState(
-    blockToEdit?.description ?? '',
-  );
+  // the block's saved values, or blank for a new block
+  const initialTitle = blockToEdit?.title ?? '';
+  const initialDescription = blockToEdit?.description ?? '';
+  const initialStart = blockToEdit
+    ? minutesToTimeInput(blockToEdit.startMinutes)
+    : '';
+  const initialEnd = blockToEdit
+    ? minutesToTimeInput(blockToEdit.endMinutes)
+    : '';
+  const [title, setTitle] = useState(initialTitle);
+  const [description, setDescription] = useState(initialDescription);
   // the time inputs' values as the browser reports them: "HH:MM" (24-hour)
   // once a whole time is entered, and "" while empty or half-filled
-  const [start, setStart] = useState(
-    blockToEdit ? minutesToTimeInput(blockToEdit.startMinutes) : '',
-  );
-  const [end, setEnd] = useState(
-    blockToEdit ? minutesToTimeInput(blockToEdit.endMinutes) : '',
-  );
+  const [start, setStart] = useState(initialStart);
+  const [end, setEnd] = useState(initialEnd);
   const { pending: submitting, error, run } = useRequest();
+
+  const hasUnsavedChanges =
+    title.trim() !== initialTitle ||
+    description.trim() !== initialDescription ||
+    start !== initialStart ||
+    end !== initialEnd;
+  useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
 
   const startMinutes = timeInputToMinutes(start);
   const endMinutes = timeInputToMinutes(end);

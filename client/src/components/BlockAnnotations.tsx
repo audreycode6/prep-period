@@ -5,6 +5,7 @@ import {
   type AnnotationInputRequest,
 } from '@prep-period/shared';
 import { saveAnnotations } from '../api/blocks';
+import type { OnUnsavedChange } from '../hooks/unsavedChanges';
 import { useDraftList } from '../hooks/useDraftList';
 import { AnnotationRow, type AnnotationDraft } from './AnnotationRow';
 
@@ -15,6 +16,7 @@ type Props = {
   activities: Activity[];
   // called after a save, so the plan's copy of the annotations stays current
   onSaved: () => void;
+  onUnsavedChange?: OnUnsavedChange;
 };
 
 /**
@@ -54,6 +56,7 @@ export function BlockAnnotations({
   annotations,
   activities,
   onSaved,
+  onUnsavedChange,
 }: Props) {
   const list = useDraftList({
     initialDrafts: toDrafts(annotations),
@@ -63,6 +66,7 @@ export function BlockAnnotations({
     saveInputs: async (inputs) =>
       toDrafts(await saveAnnotations(blockId, inputs)),
     onSaved,
+    onUnsavedChange,
   });
 
   function addDraft() {
