@@ -8,6 +8,11 @@ import {
 import { deleteBlock, updateBlock } from '../api/blocks';
 import { errorMessage } from '../api/client';
 import { addBlock, deletePlan, getPlan, updatePlan } from '../api/plans';
+import {
+  useReportUnsavedChanges,
+  useUnsavedSections,
+  type OnUnsavedChange,
+} from '../hooks/unsavedChanges';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 import { PlanBlock } from './PlanBlock';
 import { ProfileSelect } from './ProfileSelect';
@@ -17,23 +22,27 @@ import { TodayNote } from './TodayNote';
 type Props = {
   planId: string;
   onClose: () => void;
+  onDeleted: () => void;
   onEditProfile: (profileId: string) => void;
   onNewProfile: () => void;
+  onUnsavedChange?: OnUnsavedChange;
   // a profile just created from this plan, which the plan moves onto
   newProfileId?: string;
 };
 
 /**
  * Editor for one plan: its profile, today-note and blocks, with their
- * activities and annotations. Back to plans, and deleting the plan, call
- * `onClose`; the profile buttons call `onEditProfile` and `onNewProfile`.
+ * activities and annotations. Back to plans calls `onClose`; deleting the
+ * plan calls `onDeleted` instead. `onUnsavedChange` covers the whole plan.
  * Given `newProfileId`, moves the plan onto that profile as it loads.
  */
 export function PlanEditor({
   planId,
   onClose,
+  onDeleted,
   onEditProfile,
   onNewProfile,
+  onUnsavedChange,
   newProfileId,
 }: Props) {
   // null until the first load answers
@@ -41,6 +50,8 @@ export function PlanEditor({
   const [error, setError] = useState<string | null>(null);
   // the block whose edit form is open, or null when none is
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const { hasUnsavedChanges, onUnsavedChangeFor } = useUnsavedSections();
+  useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
 
   useEffect(() => {
     const load =
@@ -135,7 +146,7 @@ export function PlanEditor({
 
     try {
       await deletePlan(plan.id);
-      onClose();
+      onDeleted();
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -161,7 +172,11 @@ export function PlanEditor({
             Delete plan
           </button>
           <h3>Add a block</h3>
-          <BlockForm submitLabel="Add block" onSubmit={handleAdd} />
+          <BlockForm
+            submitLabel="Add block"
+            onSubmit={handleAdd}
+            onUnsavedChange={onUnsavedChangeFor('newBlock')}
+          />
           {plan.date && <p>{plan.date}</p>}
           <ProfileSelect
             plan={plan}
@@ -180,6 +195,7 @@ export function PlanEditor({
             planId={plan.id}
             todayNote={plan.todayNote}
             onSaved={setPlan}
+            onUnsavedChange={onUnsavedChangeFor('todayNote')}
           />
           {plan.blocks.length === 0 ? (
             <p>No blocks yet.</p>
@@ -196,6 +212,7 @@ export function PlanEditor({
                   onSave={(values) => handleEdit(block, values)}
                   onDelete={() => handleDeleteBlock(block)}
                   onContentSaved={reload}
+                  onUnsavedChange={onUnsavedChangeFor(block.id)}
                 />
               ))}
             </ol>

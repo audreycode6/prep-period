@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Teacher } from '@prep-period/shared';
 import { logout } from '../api/auth';
 import { useRequest } from '../hooks/useRequest';
@@ -34,12 +34,44 @@ function pageAfterProfileSave(
 /**
  * The app for a signed-in teacher, opening on the plan list. Calls
  * `onSignedOut` once signing out succeeds; a failed sign out shows its error.
+ * While the open page has unsaved changes, leaving it, signing out, reloading
+ * or closing the tab asks first.
  */
 export function SignedInApp({ teacher, onSignedOut }: Props) {
   const [page, setPage] = useState<Page>({ kind: 'planList' });
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { pending: signingOut, error, run } = useRequest();
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    // browsers show their own wording; preventing the unload is what asks
+    function warnBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  /**
+   * True when there's nothing unsaved to lose,
+   * or the teacher agrees to not save changes
+   */
+  function confirmLeave() {
+    return (
+      !hasUnsavedChanges ||
+      window.confirm('You have unsaved changes. Leave without saving them?')
+    );
+  }
+
+  /**
+   * Opens `next`, unless the teacher chooses to stay on the open page.
+   */
+  function leaveTo(next: Page) {
+    if (confirmLeave()) setPage(next);
+  }
+
   function handleSignOut() {
+    if (!confirmLeave()) return;
     return run(async () => {
       await logout();
       onSignedOut();
@@ -71,24 +103,27 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
         <PlanEditor
           planId={page.planId}
           newProfileId={page.newProfileId}
-          onClose={() => setPage({ kind: 'planList' })}
+          onClose={() => leaveTo({ kind: 'planList' })}
+          onDeleted={() => setPage({ kind: 'planList' })}
           onEditProfile={(profileId) =>
-            setPage({ kind: 'profileForm', profileId, returnTo: page })
+            leaveTo({ kind: 'profileForm', profileId, returnTo: page })
           }
           onNewProfile={() =>
-            setPage({
+            leaveTo({
               kind: 'profileForm',
               profileId: null,
               returnTo: { kind: 'planEditor', planId: page.planId },
             })
           }
+          onUnsavedChange={setHasUnsavedChanges}
         />
       )}
       {page.kind === 'profileForm' && (
         <ProfileForm
           profileId={page.profileId}
           onSaved={(profile) => setPage(pageAfterProfileSave(page, profile.id))}
-          onClose={() => setPage(page.returnTo)}
+          onClose={() => leaveTo(page.returnTo)}
+          onUnsavedChange={setHasUnsavedChanges}
         />
       )}
     </>
