@@ -48,13 +48,15 @@ describe('messages for input that stops a save', () => {
     }
   });
 
-  it('rejects fractional activity minutes as not a whole number', () => {
-    expect(
-      firstValidationMessage(activityInputSchema, {
-        label: 'Warm-up',
-        minutes: 1.5,
-      }),
-    ).toBe('Minutes must be a whole number');
+  it('rejects fractional or NaN activity minutes as not a whole number', () => {
+    for (const minutes of [1.5, NaN]) {
+      expect(
+        firstValidationMessage(activityInputSchema, {
+          label: 'Warm-up',
+          minutes,
+        }),
+      ).toBe('Minutes must be a whole number');
+    }
   });
 
   it('rejects zero or negative activity minutes as less than 1', () => {
@@ -66,6 +68,22 @@ describe('messages for input that stops a save', () => {
         }),
       ).toBe('Minutes must be 1 or more, or left empty for flexible');
     }
+  });
+
+  it('accepts activity minutes up to a full day and rejects more', () => {
+    const activity = { label: 'Warm-up' };
+    expect(
+      firstValidationMessage(activityInputSchema, {
+        ...activity,
+        minutes: 1440,
+      }),
+    ).toBeUndefined();
+    expect(
+      firstValidationMessage(activityInputSchema, {
+        ...activity,
+        minutes: 1441,
+      }),
+    ).toBe('Minutes must be 1440 or less, a full day');
   });
 
   it('rejects a block time before 00:00 or after 23:59 as outside the day', () => {

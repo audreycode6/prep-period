@@ -142,6 +142,10 @@ export const activityFieldsSchema = z.object({
   minutes: z
     .int('Minutes must be a whole number')
     .positive('Minutes must be 1 or more, or left empty for flexible')
+    .max(
+      MINUTES_PER_DAY,
+      `Minutes must be ${MINUTES_PER_DAY} or less, a full day`,
+    )
     .nullable(), // null = flexible
 });
 
