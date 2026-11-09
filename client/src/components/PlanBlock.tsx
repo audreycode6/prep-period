@@ -41,7 +41,8 @@ export function PlanBlock({
   onContentSaved,
   onUnsavedChange,
 }: Props) {
-  const { hasUnsavedChanges, onUnsavedChangeFor } = useUnsavedSections();
+  const { hasUnsavedChanges, hasUnsavedChangesIn, onUnsavedChangeFor } =
+    useUnsavedSections();
   useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
 
   return (
@@ -77,6 +78,7 @@ export function PlanBlock({
         startMinutes={block.startMinutes}
         endMinutes={block.endMinutes}
         annotations={block.annotations}
+        annotationsHaveUnsavedChanges={hasUnsavedChangesIn('annotations')}
         onSaved={onContentSaved}
         onUnsavedChange={onUnsavedChangeFor('activities')}
       />
