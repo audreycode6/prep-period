@@ -179,8 +179,8 @@ export async function updatePlan(
 }
 
 /**
- * Deletes a plan along with its blocks and activities. Returns false when the
- * plan is not found or not yours.
+ * Deletes a plan along with its blocks and their activities and annotations.
+ * Returns false when the plan is not found or not yours.
  */
 export async function deletePlan(
   teacherId: string,

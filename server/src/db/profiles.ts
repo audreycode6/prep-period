@@ -65,6 +65,9 @@ function toSummary(row: ProfileRowWithInUse): ClassroomProfileSummary {
   };
 }
 
+/**
+ * Lists the teacher's live profiles, the default first, then by name.
+ */
 export async function listProfiles(
   teacherId: string,
 ): Promise<ClassroomProfileSummary[]> {
@@ -75,6 +78,10 @@ export async function listProfiles(
   return rows.map(toSummary);
 }
 
+/**
+ * Finds a teacher's live profile by id. Returns undefined when it is not
+ * found, archived, or not theirs.
+ */
 export async function findProfile(
   teacherId: string,
   id: string,

@@ -121,8 +121,8 @@ export async function updateBlock(
 }
 
 /**
- * Deletes a block along with its activities. Returns false when the block is
- * not found or not yours.
+ * Deletes a block along with its activities and annotations. Returns false
+ * when the block is not found or not yours.
  */
 export async function deleteBlock(
   teacherId: string,
