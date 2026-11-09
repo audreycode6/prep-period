@@ -14,7 +14,7 @@ import {
   replaceActivities,
   replaceAnnotations,
   updateBlock,
-} from '../db/plans.js';
+} from '../db/blocks.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { isUuid } from './validation.js';
 

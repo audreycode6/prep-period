@@ -9,10 +9,10 @@ import {
   type Plan,
   type PlanSummary,
 } from '@prep-period/shared';
+import { insertBlock } from '../db/blocks.js';
 import {
   deletePlan,
   findPlan,
-  insertBlock,
   insertPlan,
   listPlans,
   updatePlan,
