@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  durationInputToMinutes,
   formatDuration,
   minutesToDisplay,
   minutesToTimeInput,
@@ -26,6 +27,26 @@ describe('timeInputToMinutes', () => {
     expect(timeInputToMinutes('24:00')).toBeNull();
     expect(timeInputToMinutes('12:60')).toBeNull();
     expect(timeInputToMinutes('08:00:00')).toBeNull();
+  });
+});
+
+describe('durationInputToMinutes', () => {
+  it('converts digits to minutes, ignoring surrounding spaces', () => {
+    expect(durationInputToMinutes('15')).toBe(15);
+    expect(durationInputToMinutes(' 15 ')).toBe(15);
+    expect(durationInputToMinutes('0')).toBe(0);
+  });
+
+  it('returns null for empty or blank text', () => {
+    expect(durationInputToMinutes('')).toBeNull();
+    expect(durationInputToMinutes('   ')).toBeNull();
+  });
+
+  it('returns NaN for anything but digits, including text Number() reads', () => {
+    const values = ['12e4', '0x10', '1.5', '-5', '+5', '1 5', 'e10340', 'abc'];
+    for (const value of values) {
+      expect(durationInputToMinutes(value)).toBeNaN();
+    }
   });
 });
 

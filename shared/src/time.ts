@@ -5,6 +5,9 @@
  */
 const TIME_INPUT = /^(?<hours>[01]\d|2[0-3]):(?<minutes>[0-5]\d)$/;
 
+// Number() alone would read "12e4" as 120000 and "0x10" as 16
+const DIGITS_ONLY = /^\d+$/;
+
 export const MINUTES_PER_DAY = 24 * 60;
 
 /**
@@ -16,6 +19,17 @@ export function timeInputToMinutes(value: string): number | null {
   const groups = TIME_INPUT.exec(value)?.groups;
   if (!groups) return null;
   return Number(groups.hours) * 60 + Number(groups.minutes);
+}
+
+/**
+ * Converts a duration field's text to minutes, ignoring surrounding spaces.
+ * Returns null for empty text, which means flexible, and NaN for anything but
+ * digits, which validation rejects as not a whole number.
+ */
+export function durationInputToMinutes(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  return DIGITS_ONLY.test(trimmed) ? Number(trimmed) : NaN;
 }
 
 /**

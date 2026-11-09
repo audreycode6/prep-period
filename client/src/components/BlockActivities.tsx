@@ -1,6 +1,7 @@
 import {
   activityInputSchema,
   activityMinutesOverBlockLength,
+  durationInputToMinutes,
   formatDuration,
   type Activity,
   type ActivityInputRequest,
@@ -40,13 +41,15 @@ function toDrafts(activities: Activity[]): ActivityDraft[] {
 
 /**
  * Converts a draft into the activity sent on save: empty minutes become null
- * (flexible), and each non-blank line of steps, trimmed, becomes one step.
+ * (flexible), minutes that aren't only digits become a value validation
+ * rejects as not a whole number, and each non-blank line of steps, trimmed,
+ * becomes one step.
  */
 function toInput(draft: ActivityDraft): ActivityInputRequest {
   return {
     id: draft.id,
     label: draft.label,
-    minutes: draft.minutesText.trim() === '' ? null : Number(draft.minutesText),
+    minutes: durationInputToMinutes(draft.minutesText),
     steps: draft.stepsText
       .split('\n')
       .map((line) => line.trim())

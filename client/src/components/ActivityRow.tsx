@@ -39,9 +39,7 @@ export function ActivityRow({
       <label>
         Minutes
         <input
-          type="number"
-          min={1}
-          step={1}
+          inputMode="numeric"
           placeholder="Leave empty if flexible"
           value={draft.minutesText}
           onChange={(e) => onChange({ minutesText: e.target.value })}
