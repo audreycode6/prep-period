@@ -30,38 +30,39 @@ export function useReportUnsavedChanges(
 }
 
 /**
- * For a component made of sections that each report unsaved changes.
+ * For a component made of sections that each report their own unsaved
+ * changes. `SectionName` is the names those sections go by.
  * Returns:
- * - `onUnsavedChangeFor(key)`: the callback to give the section named `key`
+ * - `onUnsavedChangeFor(name)`: the callback to give that section
  * - `hasUnsavedChanges`: true while any section has unsaved changes, for the
  *   component to show and report up
- * - `sectionHasUnsavedChanges(key)`: true while the section named `key` has
- *   unsaved changes, for when one section's edits matter to another
+ * - `sectionHasUnsavedChanges(name)`: true while that section has unsaved
+ *   changes, for when one section's edits matter to another
  */
-export function useUnsavedSections() {
-  const [unsavedKeys, setUnsavedKeys] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+export function useUnsavedSections<SectionName extends string = string>() {
+  const [unsavedSectionNames, setUnsavedSectionNames] = useState<
+    ReadonlySet<SectionName>
+  >(() => new Set());
 
-  function onUnsavedChangeFor(key: string): OnUnsavedChange {
+  function onUnsavedChangeFor(name: SectionName): OnUnsavedChange {
     return (hasUnsavedChanges) =>
-      setUnsavedKeys((current) => {
+      setUnsavedSectionNames((current) => {
         // the same set back lets React skip a render when nothing changed
-        if (current.has(key) === hasUnsavedChanges) return current;
+        if (current.has(name) === hasUnsavedChanges) return current;
         const next = new Set(current);
-        if (hasUnsavedChanges) next.add(key);
-        else next.delete(key);
+        if (hasUnsavedChanges) next.add(name);
+        else next.delete(name);
         return next;
       });
   }
 
-  function sectionHasUnsavedChanges(key: string) {
-    return unsavedKeys.has(key);
+  function sectionHasUnsavedChanges(name: SectionName) {
+    return unsavedSectionNames.has(name);
   }
 
   return {
-    hasUnsavedChanges: unsavedKeys.size > 0,
-    hasUnsavedChangesIn: sectionHasUnsavedChanges,
+    hasUnsavedChanges: unsavedSectionNames.size > 0,
+    sectionHasUnsavedChanges,
     onUnsavedChangeFor,
   };
 }
