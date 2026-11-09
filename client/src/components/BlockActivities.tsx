@@ -20,6 +20,8 @@ type Props = {
   endMinutes: number;
   // the block's saved annotations, to name the ones removed with an activity
   annotations: Annotation[];
+  // a save that adds or removes an activity clears these edits
+  annotationsHaveUnsavedChanges: boolean;
   // called after a save, so the plan can reload what depends on the activities
   onSaved: () => void;
   onUnsavedChange?: OnUnsavedChange;
@@ -72,6 +74,7 @@ export function BlockActivities({
   startMinutes,
   endMinutes,
   annotations,
+  annotationsHaveUnsavedChanges,
   onSaved,
   onUnsavedChange,
 }: Props) {
@@ -128,6 +131,28 @@ export function BlockActivities({
     }
   }
 
+  /**
+   * Saves the activities, asking first when the save adds or removes an
+   * activity while annotations have unsaved edits. Cancel keeps both lists as
+   * they are.
+   */
+  function confirmSave() {
+    const addsOrRemovesActivities =
+      list.drafts.some((draft) => draft.id === undefined) ||
+      list.drafts.length !== activities.length;
+    if (
+      annotationsHaveUnsavedChanges &&
+      addsOrRemovesActivities &&
+      !window.confirm(
+        "Saving activities will clear this block's unsaved annotation " +
+          'edits. Save anyway?',
+      )
+    ) {
+      return;
+    }
+    list.save();
+  }
+
   return (
     <div>
       {list.drafts.length === 0 ? (
@@ -151,7 +176,7 @@ export function BlockActivities({
       <button type="button" onClick={addDraft}>
         Add activity
       </button>
-      <button type="button" disabled={!list.canSave} onClick={list.save}>
+      <button type="button" disabled={!list.canSave} onClick={confirmSave}>
         Save activities
       </button>
       {list.error && <p role="alert">{list.error}</p>}

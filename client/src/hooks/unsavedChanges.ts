@@ -30,26 +30,39 @@ export function useReportUnsavedChanges(
 }
 
 /**
- * Collects which of a component's sections have unsaved changes.
- * `onUnsavedChangeFor(key)` gives the callback for the section named
- * `key`, and `hasUnsavedChanges` is true while any section has some.
+ * For a component made of sections that each report their own unsaved
+ * changes. `SectionName` is the names those sections go by.
+ * Returns:
+ * - `onUnsavedChangeFor(name)`: the callback to give that section
+ * - `hasUnsavedChanges`: true while any section has unsaved changes, for the
+ *   component to show and report up
+ * - `sectionHasUnsavedChanges(name)`: true while that section has unsaved
+ *   changes, for when one section's edits matter to another
  */
-export function useUnsavedSections() {
-  const [unsavedKeys, setUnsavedKeys] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+export function useUnsavedSections<SectionName extends string = string>() {
+  const [unsavedSectionNames, setUnsavedSectionNames] = useState<
+    ReadonlySet<SectionName>
+  >(() => new Set());
 
-  function onUnsavedChangeFor(key: string): OnUnsavedChange {
+  function onUnsavedChangeFor(name: SectionName): OnUnsavedChange {
     return (hasUnsavedChanges) =>
-      setUnsavedKeys((current) => {
+      setUnsavedSectionNames((current) => {
         // the same set back lets React skip a render when nothing changed
-        if (current.has(key) === hasUnsavedChanges) return current;
+        if (current.has(name) === hasUnsavedChanges) return current;
         const next = new Set(current);
-        if (hasUnsavedChanges) next.add(key);
-        else next.delete(key);
+        if (hasUnsavedChanges) next.add(name);
+        else next.delete(name);
         return next;
       });
   }
 
-  return { hasUnsavedChanges: unsavedKeys.size > 0, onUnsavedChangeFor };
+  function sectionHasUnsavedChanges(name: SectionName) {
+    return unsavedSectionNames.has(name);
+  }
+
+  return {
+    hasUnsavedChanges: unsavedSectionNames.size > 0,
+    sectionHasUnsavedChanges,
+    onUnsavedChangeFor,
+  };
 }
