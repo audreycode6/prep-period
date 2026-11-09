@@ -54,6 +54,7 @@ function toProfile(row: ProfileRowWithInUse): ClassroomProfile {
     updatedAt: row.updated_at.toISOString(),
   };
 }
+
 function toSummary(row: ProfileRowWithInUse): ClassroomProfileSummary {
   return {
     id: row.id,
@@ -97,6 +98,20 @@ export async function findProfileIncludingArchived(
     .where({ id, teacher_id: teacherId })
     .first();
   return row ? toProfile(row) : undefined;
+}
+
+/**
+ * Finds the id of the teacher's live default profile, or undefined when they
+ * have none.
+ */
+export async function findDefaultProfileId(
+  teacherId: string,
+): Promise<string | undefined> {
+  const row = await db('classroom_profiles')
+    .where({ teacher_id: teacherId, is_default: true })
+    .whereNull('archived_at')
+    .first('id');
+  return row?.id;
 }
 
 async function clearDefault(
