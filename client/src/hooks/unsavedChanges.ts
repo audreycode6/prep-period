@@ -30,9 +30,13 @@ export function useReportUnsavedChanges(
 }
 
 /**
- * Collects which of a component's sections have unsaved changes.
- * `onUnsavedChangeFor(key)` gives the callback for the section named
- * `key`, and `hasUnsavedChanges` is true while any section has some.
+ * For a component made of sections that each report unsaved changes.
+ * Returns:
+ * - `onUnsavedChangeFor(key)`: the callback to give the section named `key`
+ * - `hasUnsavedChanges`: true while any section has unsaved changes, for the
+ *   component to show and report up
+ * - `sectionHasUnsavedChanges(key)`: true while the section named `key` has
+ *   unsaved changes, for when one section's edits matter to another
  */
 export function useUnsavedSections() {
   const [unsavedKeys, setUnsavedKeys] = useState<ReadonlySet<string>>(
@@ -51,5 +55,13 @@ export function useUnsavedSections() {
       });
   }
 
-  return { hasUnsavedChanges: unsavedKeys.size > 0, onUnsavedChangeFor };
+  function sectionHasUnsavedChanges(key: string) {
+    return unsavedKeys.has(key);
+  }
+
+  return {
+    hasUnsavedChanges: unsavedKeys.size > 0,
+    hasUnsavedChangesIn: sectionHasUnsavedChanges,
+    onUnsavedChangeFor,
+  };
 }
