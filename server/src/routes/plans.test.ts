@@ -1,9 +1,16 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import type { Plan } from '@prep-period/shared';
 import { createApp } from '../app.js';
 import { db } from '../db.js';
 import { sessionStore } from '../middleware/session.js';
-import { activityRows, addBlock, createPlan } from '../test/plans.js';
+import {
+  activityRows,
+  addBlock,
+  blockContents,
+  createPlan,
+  planIds,
+} from '../test/plans.js';
 import { teacherWithProfile, twoTeachers } from '../test/teachers.js';
 
 beforeEach(async () => {
@@ -106,6 +113,17 @@ describe('plans: another teacher', () => {
     const row = await db('plans').where({ id: planId }).first();
     expect(row.profile_id).toBe(owner.profileId);
   });
+
+  it("answers 404 on POST :id/duplicate; cannot copy another teacher's plan", async () => {
+    const { owner, other } = await twoTeachers();
+    const otherPlanId = await createPlan(other.agent);
+
+    const res = await owner.agent.post(`/api/plans/${otherPlanId}/duplicate`);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'plan not found' });
+    expect(await db('plans').pluck('id')).toEqual([otherPlanId]);
+  });
 });
 
 /* Test plan routes before a session is active:
@@ -126,6 +144,7 @@ describe('plans: no session', () => {
       await request(app).patch(`/api/plans/${randomId}`).send({}),
       await request(app).delete(`/api/plans/${randomId}`),
       await request(app).post(`/api/plans/${randomId}/blocks`).send({}),
+      await request(app).post(`/api/plans/${randomId}/duplicate`),
     ];
 
     for (const res of responses) {
@@ -511,6 +530,206 @@ describe('plans: one teacher', () => {
   });
 });
 
+/* Test POST :id/duplicate:
+ the copy has the original's content under new ids, and the original is left
+ as it was.
+ */
+describe('plans: duplicate', () => {
+  it('titles the copy "<title> (copy)", clears its date and keeps its today-note', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planRes = await user.agent.post('/api/plans').send({
+      title: 'Monday',
+      date: '2026-11-02',
+      todayNote: 'Fire drill at 10',
+    });
+
+    const res = await user.agent.post(
+      `/api/plans/${planRes.body.id}/duplicate`,
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      title: 'Monday (copy)',
+      date: null,
+      todayNote: 'Fire drill at 10',
+    });
+  });
+
+  it('copies the blocks, activities and annotations under new ids', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const morningId = await addBlock(user.agent, planId, 480, 540);
+    const afternoonId = await addBlock(user.agent, planId, 780, 840);
+    const activitiesRes = await user.agent
+      .put(`/api/blocks/${morningId}/activities`)
+      .send([
+        { label: 'Warm-up', steps: [{ text: 'Stretch' }], minutes: 5 },
+        { label: 'Mini-lesson' },
+      ]);
+    await user.agent.put(`/api/blocks/${morningId}/annotations`).send([
+      { type: 'must_know', text: 'Sam leaves at 9:15' },
+      {
+        activityId: activitiesRes.body[1].id,
+        type: 'heads_up',
+        text: 'Use the blue markers',
+      },
+    ]);
+    await user.agent
+      .put(`/api/blocks/${afternoonId}/activities`)
+      .send([{ label: 'Read-aloud' }]);
+    const original = (await user.agent.get(`/api/plans/${planId}`)).body;
+
+    const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    expect(res.status).toBe(201);
+    expect(blockContents(res.body.blocks)).toEqual(
+      blockContents(original.blocks),
+    );
+    const originalIds = new Set(planIds(original));
+    expect(planIds(res.body).filter((id) => originalIds.has(id))).toEqual([]);
+  });
+
+  it('leaves the original plan unchanged', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    const activitiesRes = await user.agent
+      .put(`/api/blocks/${blockId}/activities`)
+      .send([{ label: 'Warm-up' }]);
+    await user.agent.put(`/api/blocks/${blockId}/annotations`).send([
+      {
+        activityId: activitiesRes.body[0].id,
+        type: 'if_time',
+        text: 'Second verse',
+      },
+    ]);
+    const before = await user.agent.get(`/api/plans/${planId}`);
+
+    await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    const after = await user.agent.get(`/api/plans/${planId}`);
+    expect(after.body).toEqual(before.body);
+  });
+
+  it('copies a plan with no blocks', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+
+    const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).not.toBe(planId);
+    expect(res.body.blocks).toEqual([]);
+  });
+
+  it("keeps the original's profile when that profile is archived", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    await user.agent.post(`/api/profiles/${user.profileId}/archive`);
+
+    const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.profile).toMatchObject({
+      id: user.profileId,
+      isArchived: true,
+    });
+  });
+
+  it("keeps the original's profile, not the teacher's default", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const profileRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Pull-out group' });
+    const planRes = await user.agent
+      .post('/api/plans')
+      .send({ title: 'Monday', profileId: profileRes.body.id });
+
+    const res = await user.agent.post(
+      `/api/plans/${planRes.body.id}/duplicate`,
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.profile.id).toBe(profileRes.body.id);
+  });
+
+  it("copies each block's profile_id", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const pullOutRes = await user.agent
+      .post('/api/profiles')
+      .send({ name: 'Pull-out group' });
+    const planId = await createPlan(user.agent);
+    const blockId = await addBlock(user.agent, planId, 480, 540);
+    // set straight in Postgres, so this test depends only on the duplicate
+    await db('blocks')
+      .where({ id: blockId })
+      .update({ profile_id: pullOutRes.body.id });
+
+    const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    const blockCopy = await db('blocks')
+      .where({ plan_id: res.body.id })
+      .first();
+    expect(blockCopy.profile_id).toBe(pullOutRes.body.id);
+  });
+
+  it("keeps blocks with the same times in the original plan's order", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    for (const title of ['Reading', 'Writing', 'Math', 'Science']) {
+      await user.agent
+        .post(`/api/plans/${planId}/blocks`)
+        .send({ title, startMinutes: 480, endMinutes: 540 });
+    }
+    const original = (await user.agent.get(`/api/plans/${planId}`)).body;
+
+    const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    const titles = (plan: Plan) => plan.blocks.map((block) => block.title);
+    expect(titles(res.body)).toEqual(titles(original));
+  });
+
+  it('makes a regular plan, not a template, from a template', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    // set straight in Postgres, so this test depends only on the duplicate
+    await db('plans').where({ id: planId }).update({ is_template: true });
+
+    const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
+
+    const row = await db('plans').where({ id: res.body.id }).first();
+    expect(row.is_template).toBe(false);
+  });
+
+  it("cuts the end off a 255-character title so the copy's title fits", async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planRes = await user.agent
+      .post('/api/plans')
+      .send({ title: 'a'.repeat(255) });
+
+    const res = await user.agent.post(
+      `/api/plans/${planRes.body.id}/duplicate`,
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe(`${'a'.repeat(248)} (copy)`);
+  });
+
+  it('drops the space a cut leaves at the end of the title before " (copy)"', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planRes = await user.agent
+      .post('/api/plans')
+      .send({ title: `${'a'.repeat(247)} ${'b'.repeat(7)}` });
+
+    const res = await user.agent.post(
+      `/api/plans/${planRes.body.id}/duplicate`,
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe(`${'a'.repeat(247)} (copy)`);
+  });
+});
+
 /* Test input the schemas or the id check refuse:
  each one is answered with a 400 or 404 before any query runs, never a 500.
  */
@@ -525,6 +744,7 @@ describe('plans: bad input', () => {
       await user.agent
         .post('/api/plans/not-a-uuid/blocks')
         .send({ title: 'Math', startMinutes: 480, endMinutes: 540 }),
+      await user.agent.post('/api/plans/not-a-uuid/duplicate'),
     ];
 
     for (const res of responses) {
