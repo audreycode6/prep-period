@@ -5,6 +5,7 @@ import type {
   PlanUpdate,
 } from '@prep-period/shared';
 import { db } from '../db.js';
+import { BLOCK_ORDER, copyBlocks } from './blocks.js';
 import {
   readBlockContents,
   toBlock,
@@ -19,9 +20,9 @@ import {
   findProfileIncludingArchived,
 } from './profiles.js';
 
-// Blocks are ordered by their times. 'id' breaks exact ties, so two blocks with
-// the same times and 'created_at' don't swap places between reloads.
-const BLOCK_ORDER = ['start_minutes', 'end_minutes', 'created_at', 'id'];
+// plans.title is a varchar(255)
+const TITLE_MAX_LENGTH = 255;
+const COPY_SUFFIX = ' (copy)';
 
 /**
  * Lists the teacher's plans, ordered by most recently updated, each with its
@@ -176,6 +177,47 @@ export async function updatePlan(
   // deleted between the read and the update
   if (!row) return undefined;
   return assemblePlan(teacherId, row);
+}
+
+/**
+ * Returns the title with " (copy)" appended, trimming the end off a title too
+ * long for the result to fit in TITLE_MAX_LENGTH.
+ */
+function toCopyTitle(title: string): string {
+  const titleThatFits = title.slice(0, TITLE_MAX_LENGTH - COPY_SUFFIX.length);
+  return titleThatFits.trimEnd() + COPY_SUFFIX;
+}
+
+/**
+ * Copies the teacher's plan to a new plan titled "<title> (copy)", carrying
+ * over its profile, today-note, blocks, activities and annotations under new
+ * ids. Returns the new plan, or undefined when the plan is not found or not
+ * yours.
+ */
+export async function duplicatePlan(
+  teacherId: string,
+  id: string,
+): Promise<Plan | undefined> {
+  const copyRow = await db.transaction(async (trx) => {
+    const original = await trx<PlanRow>('plans')
+      .where({ id, teacher_id: teacherId })
+      .first();
+    if (!original) return undefined;
+
+    const [copy]: PlanRow[] = await trx('plans')
+      .insert({
+        teacher_id: teacherId,
+        profile_id: original.profile_id,
+        title: toCopyTitle(original.title),
+        date: null, // cleared
+        is_template: false, // start as regular plans
+        today_note: original.today_note,
+      })
+      .returning('*');
+    await copyBlocks(trx, original.id, copy.id);
+    return copy;
+  });
+  return copyRow ? assemblePlan(teacherId, copyRow) : undefined;
 }
 
 /**

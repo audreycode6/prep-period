@@ -12,6 +12,7 @@ import {
 import { insertBlock } from '../db/blocks.js';
 import {
   deletePlan,
+  duplicatePlan,
   findPlan,
   insertPlan,
   listPlans,
@@ -131,6 +132,22 @@ plansRouter.delete(
       return;
     }
     res.status(204).end();
+  },
+);
+
+plansRouter.post(
+  '/:id/duplicate',
+  async (req: Request<IdParams>, res: Response<Plan | ApiErrorBody>) => {
+    if (!isUuid(req.params.id)) {
+      res.status(404).json({ error: 'plan not found' });
+      return;
+    }
+    const plan = await duplicatePlan(req.teacherId!, req.params.id);
+    if (plan === undefined) {
+      res.status(404).json({ error: 'plan not found' });
+      return;
+    }
+    res.status(201).json(plan);
   },
 );
 

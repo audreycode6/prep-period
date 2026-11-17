@@ -19,6 +19,10 @@ import {
   type BlockRow,
 } from './planRows.js';
 
+// Blocks are ordered by their times. 'id' breaks exact ties, so two blocks with
+// the same times and 'created_at' don't swap places between reloads.
+export const BLOCK_ORDER = ['start_minutes', 'end_minutes', 'created_at', 'id'];
+
 /**
  * Sets the plan's updated_at to now.
  */
@@ -263,4 +267,98 @@ export async function replaceAnnotations(
       .orderBy('position');
     return rows.map(toAnnotation);
   });
+}
+
+/**
+ * Copies the original block's activities into the copy block under new ids,
+ * keeping their positions. Returns each original activity's id mapped to its
+ * copy's id.
+ */
+async function copyActivities(
+  trx: Knex.Transaction,
+  originalBlockId: string,
+  copyBlockId: string,
+): Promise<Map<string, string>> {
+  const activityRows: ActivityRow[] = await trx('activities').where({
+    block_id: originalBlockId,
+  });
+  const activityCopyIds = new Map<string, string>();
+  for (const activity of activityRows) {
+    const [activityCopy]: Pick<ActivityRow, 'id'>[] = await trx('activities')
+      .insert({
+        block_id: copyBlockId,
+        label: activity.label,
+        steps: JSON.stringify(activity.steps),
+        minutes: activity.minutes,
+        position: activity.position,
+      })
+      .returning('id');
+    activityCopyIds.set(activity.id, activityCopy.id);
+  }
+  return activityCopyIds;
+}
+
+/**
+ * Copies the original block's annotations into the copy block under new ids,
+ * keeping their positions. An annotation on an activity goes on that
+ * activity's copy, looked up in activityCopyIds.
+ */
+async function copyAnnotations(
+  trx: Knex.Transaction,
+  originalBlockId: string,
+  copyBlockId: string,
+  activityCopyIds: Map<string, string>,
+): Promise<void> {
+  const annotationRows: AnnotationRow[] = await trx('annotations').where({
+    block_id: originalBlockId,
+  });
+  // Knex throws on an insert of no rows
+  if (annotationRows.length === 0) return;
+  await trx('annotations').insert(
+    annotationRows.map((annotation) => ({
+      block_id: copyBlockId,
+      // the foreign key keeps an annotation's activity in its own block
+      activity_id:
+        annotation.activity_id === null
+          ? null
+          : activityCopyIds.get(annotation.activity_id),
+      type: annotation.type,
+      text: annotation.text,
+      position: annotation.position,
+    })),
+  );
+}
+
+/**
+ * Copies the original plan's blocks into the copy plan, with their activities
+ * and annotations, under new ids. Links between the originals carry over to
+ * their copies, and blocks with the same times keep the order they have in
+ * the original plan.
+ */
+export async function copyBlocks(
+  trx: Knex.Transaction,
+  originalPlanId: string,
+  copyPlanId: string,
+): Promise<void> {
+  const blockRows: BlockRow[] = await trx('blocks')
+    .where({ plan_id: originalPlanId })
+    .orderBy(BLOCK_ORDER);
+
+  for (const block of blockRows) {
+    const [blockCopy]: Pick<BlockRow, 'id'>[] = await trx('blocks')
+      .insert({
+        plan_id: copyPlanId,
+        profile_id: block.profile_id,
+        title: block.title,
+        description: block.description,
+        start_minutes: block.start_minutes,
+        end_minutes: block.end_minutes,
+        // clock_timestamp() is read per insert, keeping tied blocks in order
+        created_at: trx.raw('clock_timestamp()'),
+      })
+      .returning('id');
+
+    const activityCopyIds = await copyActivities(trx, block.id, blockCopy.id);
+    await copyAnnotations(trx, block.id, blockCopy.id, activityCopyIds);
+  }
 }
