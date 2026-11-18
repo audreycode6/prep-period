@@ -34,6 +34,14 @@ export function deletePlan(id: string) {
   return apiDel(`/plans/${id}`);
 }
 
+/**
+ * Creates a copy of the plan as a new plan, blocks, activities and
+ * annotations included, and returns the new plan.
+ */
+export function duplicatePlan(id: string) {
+  return apiPost<Plan>(`/plans/${id}/duplicate`);
+}
+
 export function addBlock(planId: string, block: BlockCreateRequest) {
   return apiPost<Block>(`/plans/${planId}/blocks`, block);
 }
