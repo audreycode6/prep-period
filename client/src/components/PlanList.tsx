@@ -1,22 +1,23 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import type { ClassroomProfileSummary, PlanSummary } from '@prep-period/shared';
 import { errorMessage } from '../api/client';
-import { createPlan, getPlans } from '../api/plans';
+import { createPlan, deletePlan, getPlans } from '../api/plans';
 import { getProfiles } from '../api/profiles';
 import { useRequest } from '../hooks/useRequest';
 
 type Props = {
   onOpen: (planId: string) => void;
   onNewProfile: () => void;
+  onDuplicate: (planId: string) => Promise<void>;
 };
 
 /**
- * The teacher's plans, and a form to create one. Opening a plan, or creating
- * one, calls `onOpen` with its id; the new profile button calls
- * `onNewProfile`. With no live profiles, it asks for a profile instead of
- * offering a new plan.
+ * The teacher's plans, which can be opened, duplicated or deleted, and a
+ * form to create one. Creating a plan opens it through `onOpen`; a rejected
+ * `onDuplicate` shows its error. With no live profiles, it asks for a
+ * profile instead of offering a new plan.
  */
-export function PlanList({ onOpen, onNewProfile }: Props) {
+export function PlanList({ onOpen, onNewProfile, onDuplicate }: Props) {
   // null until the first load answers, so loading and an empty list differ
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
   // null while the profile list loads
@@ -26,6 +27,12 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const { pending: creating, error: createError, run } = useRequest();
+  const { pending: copying, error: copyError, run: runCopy } = useRequest();
+  const {
+    pending: deleting,
+    error: deleteError,
+    run: runDelete,
+  } = useRequest();
 
   useEffect(() => {
     getPlans()
@@ -41,6 +48,23 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
     await run(async () => {
       const plan = await createPlan({ title });
       onOpen(plan.id);
+    });
+  }
+
+  /**
+   * Asks for confirmation, then deletes the plan and removes it from the
+   * list. Cancel does nothing.
+   */
+  function handleDelete(plan: PlanSummary) {
+    if (!window.confirm(`Delete the "${plan.title}" plan and its content?`)) {
+      return;
+    }
+    return runDelete(async () => {
+      await deletePlan(plan.id);
+      setPlans(
+        (current) =>
+          current && current.filter((listed) => listed.id !== plan.id),
+      );
     });
   }
 
@@ -70,6 +94,8 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
         </form>
       )}
       {createError && <p role="alert">{createError}</p>}
+      {copyError && <p role="alert">{copyError}</p>}
+      {deleteError && <p role="alert">{deleteError}</p>}
       {loadError && <p role="alert">{loadError}</p>}
       {plans === null ? (
         !loadError && <p>Loading plans...</p>
@@ -79,11 +105,33 @@ export function PlanList({ onOpen, onNewProfile }: Props) {
         <ul>
           {plans.map((plan) => (
             <li key={plan.id}>
-              <button type="button" onClick={() => onOpen(plan.id)}>
-                {plan.title}
-              </button>
+              {plan.title}
               {plan.date && ` · ${plan.date}`} · {plan.profile.name}
               {plan.profile.isArchived && ' (archived)'}
+              {/* labels name the plan, since every row's buttons look alike */}
+              <button
+                type="button"
+                aria-label={`Open "${plan.title}"`}
+                onClick={() => onOpen(plan.id)}
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                aria-label={`Duplicate "${plan.title}"`}
+                disabled={copying}
+                onClick={() => runCopy(() => onDuplicate(plan.id))}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete "${plan.title}"`}
+                disabled={deleting}
+                onClick={() => handleDelete(plan)}
+              >
+                Delete
+              </button>
             </li>
           ))}
         </ul>
