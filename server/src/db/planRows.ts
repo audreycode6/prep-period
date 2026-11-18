@@ -59,7 +59,7 @@ export type AnnotationRow = {
 
 export type PlanSummaryRow = Pick<
   PlanRow,
-  'id' | 'title' | 'date' | 'updated_at'
+  'id' | 'title' | 'date' | 'is_template' | 'updated_at'
 > & {
   profile_id: string;
   profile_name: string;
@@ -145,6 +145,7 @@ export function toPlan(
     title: row.title,
     date: row.date,
     todayNote: row.today_note,
+    isTemplate: row.is_template,
     profile,
     blocks,
     createdAt: row.created_at.toISOString(),
@@ -157,6 +158,7 @@ export function toSummary(row: PlanSummaryRow): PlanSummary {
     id: row.id,
     title: row.title,
     date: row.date,
+    isTemplate: row.is_template,
     updatedAt: row.updated_at.toISOString(),
     profile: {
       id: row.profile_id,

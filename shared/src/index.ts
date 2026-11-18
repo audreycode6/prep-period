@@ -108,7 +108,9 @@ export const planCreateSchema = planFieldsSchema.extend({
   todayNote: planFieldsSchema.shape.todayNote.default(null),
 });
 
-export const planUpdateSchema = planFieldsSchema.partial();
+export const planUpdateSchema = planFieldsSchema.partial().extend({
+  isTemplate: z.boolean().optional(),
+});
 
 export type PlanCreate = z.infer<typeof planCreateSchema>;
 // what a client sends: date and todayNote may be left out
@@ -206,6 +208,7 @@ export type Block = z.infer<typeof blockFieldsSchema> & {
 
 export type Plan = Omit<z.infer<typeof planFieldsSchema>, 'profileId'> & {
   id: string;
+  isTemplate: boolean;
   // resolved even when archived, so an old plan still shows its profile
   profile: ClassroomProfile;
   blocks: Block[];
@@ -213,6 +216,9 @@ export type Plan = Omit<z.infer<typeof planFieldsSchema>, 'profileId'> & {
   updatedAt: string;
 };
 
-export type PlanSummary = Pick<Plan, 'id' | 'title' | 'date' | 'updatedAt'> & {
+export type PlanSummary = Pick<
+  Plan,
+  'id' | 'title' | 'date' | 'isTemplate' | 'updatedAt'
+> & {
   profile: Pick<ClassroomProfile, 'id' | 'name' | 'isArchived'>;
 };
