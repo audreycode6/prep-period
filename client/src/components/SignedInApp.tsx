@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Teacher } from '@prep-period/shared';
 import { logout } from '../api/auth';
+import { duplicatePlan } from '../api/plans';
 import { useRequest } from '../hooks/useRequest';
 import { PlanEditor } from './PlanEditor';
 import { PlanList } from './PlanList';
@@ -53,10 +54,11 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
   }, [hasUnsavedChanges]);
 
   /**
-   * True when there's nothing unsaved to lose,
-   * or the teacher agrees to not save changes
+   * Whether the open page can be left: true without asking when nothing is
+   * unsaved. With unsaved changes, asks the teacher whether to leave without
+   * saving them and returns their answer.
    */
-  function confirmLeave() {
+  function confirmLeavingUnsaved() {
     return (
       !hasUnsavedChanges ||
       window.confirm('You have unsaved changes. Leave without saving them?')
@@ -67,11 +69,22 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
    * Opens `next`, unless the teacher chooses to stay on the open page.
    */
   function leaveTo(next: Page) {
-    if (confirmLeave()) setPage(next);
+    if (confirmLeavingUnsaved()) setPage(next);
+  }
+
+  /**
+   * Duplicates the plan and opens the copy. Asks first when the open page
+   * has unsaved changes, and staying makes no copy. Rejects when the copy
+   * fails, leaving the page open.
+   */
+  async function duplicateAndOpen(planId: string) {
+    if (!confirmLeavingUnsaved()) return;
+    const copy = await duplicatePlan(planId);
+    setPage({ kind: 'planEditor', planId: copy.id });
   }
 
   function handleSignOut() {
-    if (!confirmLeave()) return;
+    if (!confirmLeavingUnsaved()) return;
     return run(async () => {
       await logout();
       onSignedOut();
@@ -97,14 +110,18 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
               returnTo: page,
             })
           }
+          onDuplicate={duplicateAndOpen}
         />
       )}
       {page.kind === 'planEditor' && (
         <PlanEditor
+          // a new editor for each plan: drafts never carry over to a copy
+          key={page.planId}
           planId={page.planId}
           newProfileId={page.newProfileId}
           onClose={() => leaveTo({ kind: 'planList' })}
           onDeleted={() => setPage({ kind: 'planList' })}
+          onDuplicate={() => duplicateAndOpen(page.planId)}
           onEditProfile={(profileId) =>
             leaveTo({ kind: 'profileForm', profileId, returnTo: page })
           }

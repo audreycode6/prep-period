@@ -13,16 +13,19 @@ import {
   useUnsavedSections,
   type OnUnsavedChange,
 } from '../hooks/unsavedChanges';
+import { useRequest } from '../hooks/useRequest';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 import { PlanBlock } from './PlanBlock';
 import { ProfileSelect } from './ProfileSelect';
 import { joinWithAnd, pluralize } from '../text';
+import { TemplateToggle } from './TemplateToggle';
 import { TodayNote } from './TodayNote';
 
 type Props = {
   planId: string;
   onClose: () => void;
   onDeleted: () => void;
+  onDuplicate: () => Promise<void>;
   onEditProfile: (profileId: string) => void;
   onNewProfile: () => void;
   onUnsavedChange?: OnUnsavedChange;
@@ -33,13 +36,15 @@ type Props = {
 /**
  * Editor for one plan: its profile, today-note and blocks, with their
  * activities and annotations. Back to plans calls `onClose`; deleting the
- * plan calls `onDeleted` instead. `onUnsavedChange` covers the whole plan.
- * Given `newProfileId`, moves the plan onto that profile as it loads.
+ * plan calls `onDeleted`. A rejected `onDuplicate` shows its error.
+ * `onUnsavedChange` covers the whole plan. Given `newProfileId`, moves the
+ * plan onto that profile as it loads.
  */
 export function PlanEditor({
   planId,
   onClose,
   onDeleted,
+  onDuplicate,
   onEditProfile,
   onNewProfile,
   onUnsavedChange,
@@ -50,6 +55,7 @@ export function PlanEditor({
   const [error, setError] = useState<string | null>(null);
   // the block whose edit form is open, or null when none is
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const { pending: copying, error: copyError, run: runCopy } = useRequest();
   const { hasUnsavedChanges, onUnsavedChangeFor } = useUnsavedSections();
   useReportUnsavedChanges(hasUnsavedChanges, onUnsavedChange);
 
@@ -168,9 +174,22 @@ export function PlanEditor({
       ) : (
         <>
           <h2>{plan.title}</h2>
+          <TemplateToggle
+            planId={plan.id}
+            isTemplate={plan.isTemplate}
+            onSaved={setPlan}
+          />
+          <button
+            type="button"
+            disabled={copying}
+            onClick={() => runCopy(onDuplicate)}
+          >
+            Duplicate
+          </button>
           <button type="button" onClick={handleDeletePlan}>
             Delete plan
           </button>
+          {copyError && <p role="alert">{copyError}</p>}
           <h3>Add a block</h3>
           <BlockForm
             submitLabel="Add block"
