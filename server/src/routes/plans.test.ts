@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { Plan } from '@prep-period/shared';
+import type { Plan, PlanSummary } from '@prep-period/shared';
 import { createApp } from '../app.js';
 import { db } from '../db.js';
 import { sessionStore } from '../middleware/session.js';
@@ -41,6 +41,7 @@ describe('plans: another teacher', () => {
         id: planId,
         title: 'Monday',
         date: null,
+        isTemplate: false,
         updatedAt: expect.any(String),
         profile: {
           id: owner.profileId,
@@ -530,6 +531,96 @@ describe('plans: one teacher', () => {
   });
 });
 
+/* Test isTemplate:
+ a plan is marked and unmarked as a template through PATCH :id, and both the
+ plan and its summary say whether it is one.
+ */
+describe('plans: template toggle', () => {
+  it('creates a plan with isTemplate: false', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+
+    const res = await user.agent.post('/api/plans').send({ title: 'Monday' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.isTemplate).toBe(false);
+  });
+
+  it('marks a plan as a template on PATCH :id with isTemplate: true', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+
+    const res = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ isTemplate: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.isTemplate).toBe(true);
+    const reread = await user.agent.get(`/api/plans/${planId}`);
+    expect(reread.body.isTemplate).toBe(true);
+  });
+
+  it('unmarks a template on PATCH :id with isTemplate: false', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    await user.agent.patch(`/api/plans/${planId}`).send({ isTemplate: true });
+
+    const res = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ isTemplate: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.isTemplate).toBe(false);
+    const reread = await user.agent.get(`/api/plans/${planId}`);
+    expect(reread.body.isTemplate).toBe(false);
+  });
+
+  it('leaves isTemplate unchanged on a PATCH :id that does not send it', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    await user.agent.patch(`/api/plans/${planId}`).send({ isTemplate: true });
+
+    const res = await user.agent
+      .patch(`/api/plans/${planId}`)
+      .send({ title: 'Field trip' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ title: 'Field trip', isTemplate: true });
+  });
+
+  it('lists each plan on GET / with whether it is a template', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const templateId = await createPlan(user.agent);
+    await user.agent
+      .patch(`/api/plans/${templateId}`)
+      .send({ isTemplate: true });
+
+    const res = await user.agent.get('/api/plans');
+
+    expect(res.status).toBe(200);
+    const isTemplateById = Object.fromEntries(
+      res.body.map((plan: PlanSummary) => [plan.id, plan.isTemplate]),
+    );
+    expect(isTemplateById).toEqual({ [planId]: false, [templateId]: true });
+  });
+
+  it('updates updatedAt on a PATCH :id of only isTemplate, listing the plan first on GET /', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const templateId = await createPlan(user.agent);
+    const laterPlanId = await createPlan(user.agent);
+
+    await user.agent
+      .patch(`/api/plans/${templateId}`)
+      .send({ isTemplate: true });
+
+    const res = await user.agent.get('/api/plans');
+    expect(res.body.map((plan: PlanSummary) => plan.id)).toEqual([
+      templateId,
+      laterPlanId,
+    ]);
+  });
+});
+
 /* Test POST :id/duplicate:
  the copy has the original's content under new ids, and the original is left
  as it was.
@@ -697,8 +788,8 @@ describe('plans: duplicate', () => {
 
     const res = await user.agent.post(`/api/plans/${planId}/duplicate`);
 
-    const row = await db('plans').where({ id: res.body.id }).first();
-    expect(row.is_template).toBe(false);
+    expect(res.status).toBe(201);
+    expect(res.body.isTemplate).toBe(false);
   });
 
   it("cuts the end off a 255-character title so the copy's title fits", async () => {
@@ -795,6 +886,22 @@ describe('plans: bad input', () => {
 
     expect(res.status).toBe(400);
     expect(Object.keys(res.body.fields)).toEqual(['title']);
+    expect(await db('plans').where({ id: planId }).first()).toEqual(before);
+  });
+
+  it('answers 400 with fields.isTemplate on PATCH :id when isTemplate is not a boolean, and changes nothing', async () => {
+    const user = await teacherWithProfile(createApp(), 'user@example.com');
+    const planId = await createPlan(user.agent);
+    const before = await db('plans').where({ id: planId }).first();
+
+    for (const isTemplate of ['yes', null]) {
+      const res = await user.agent
+        .patch(`/api/plans/${planId}`)
+        .send({ isTemplate });
+
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body.fields)).toEqual(['isTemplate']);
+    }
     expect(await db('plans').where({ id: planId }).first()).toEqual(before);
   });
 });

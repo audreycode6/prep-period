@@ -25,8 +25,8 @@ const TITLE_MAX_LENGTH = 255;
 const COPY_SUFFIX = ' (copy)';
 
 /**
- * Lists the teacher's plans, ordered by most recently updated, each with its
- * profile's id, name and whether it is archived.
+ * Lists summaries of the teacher's plans, most recently updated first.
+ * Templates and plans on archived profiles are included.
  */
 export async function listPlans(teacherId: string): Promise<PlanSummary[]> {
   const rows: PlanSummaryRow[] = await db('plans')
@@ -37,6 +37,7 @@ export async function listPlans(teacherId: string): Promise<PlanSummary[]> {
       'plans.id',
       'plans.title',
       'plans.date',
+      'plans.is_template',
       'plans.updated_at',
       'classroom_profiles.id as profile_id',
       'classroom_profiles.name as profile_name',
@@ -165,6 +166,7 @@ export async function updatePlan(
   if (input.title !== undefined) changes.title = input.title;
   if (input.date !== undefined) changes.date = input.date;
   if (input.todayNote !== undefined) changes.today_note = input.todayNote;
+  if (input.isTemplate !== undefined) changes.is_template = input.isTemplate;
   if (input.profileId !== undefined) changes.profile_id = input.profileId;
   if (Object.keys(changes).length === 0) {
     return assemblePlan(teacherId, existing);
