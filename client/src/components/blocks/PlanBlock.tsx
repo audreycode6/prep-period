@@ -3,7 +3,7 @@ import {
   useReportUnsavedChanges,
   useUnsavedSections,
   type OnUnsavedChange,
-} from '../hooks/unsavedChanges';
+} from '../../hooks/unsavedChanges';
 import { BlockActivities } from './BlockActivities';
 import { BlockAnnotations } from './BlockAnnotations';
 import { BlockForm, type BlockFormValues } from './BlockForm';

@@ -1,11 +1,11 @@
 import { useEffect, useState, type SubmitEvent } from 'react';
 import type { ClassroomProfileSummary, PlanSummary } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
-import { createPlan, deletePlan, getPlans } from '../api/plans';
-import { getProfiles } from '../api/profiles';
-import { useRequest } from '../hooks/useRequest';
-import { useStoredPlanFilter } from '../hooks/useStoredPlanFilter';
-import { matchesFilter } from '../planFilters';
+import { errorMessage } from '../../api/client';
+import { createPlan, deletePlan, getPlans } from '../../api/plans';
+import { getProfiles } from '../../api/profiles';
+import { useRequest } from '../../hooks/useRequest';
+import { useStoredPlanFilter } from '../../hooks/useStoredPlanFilter';
+import { matchesFilter } from '../../planFilters';
 import { TemplateFilter } from './TemplateFilter';
 
 type Props = {

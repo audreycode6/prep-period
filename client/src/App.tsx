@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import type { Teacher } from '@prep-period/shared';
 import { ApiError, errorMessage } from './api/client';
 import { getCurrentTeacher } from './api/auth';
-import { AuthForm } from './components/AuthForm';
-import { HealthStatus } from './components/HealthStatus';
-import { SignedInApp } from './components/SignedInApp';
+import { AuthForm } from './components/auth/AuthForm';
+import { HealthStatus } from './components/app/HealthStatus';
+import { SignedInApp } from './components/app/SignedInApp';
 
 // who is signed in, as far as the server has answered
 type Auth =

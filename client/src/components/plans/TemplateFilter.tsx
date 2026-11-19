@@ -1,4 +1,4 @@
-import { PLAN_FILTERS, type PlanFilter } from '../planFilters';
+import { PLAN_FILTERS, type PlanFilter } from '../../planFilters';
 
 type Props = {
   filter: PlanFilter;

@@ -1,8 +1,8 @@
 import { useState, type SubmitEvent } from 'react';
 import type { Teacher } from '@prep-period/shared';
-import { ApiError, errorMessage } from '../api/client';
-import { login, signup } from '../api/auth';
-import { useRequest } from '../hooks/useRequest';
+import { ApiError, errorMessage } from '../../api/client';
+import { login, signup } from '../../api/auth';
+import { useRequest } from '../../hooks/useRequest';
 
 type Props = {
   onSignedIn: (teacher: Teacher) => void;

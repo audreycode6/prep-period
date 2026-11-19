@@ -5,20 +5,20 @@ import {
   type BlockUpdate,
   type Plan,
 } from '@prep-period/shared';
-import { deleteBlock, updateBlock } from '../api/blocks';
-import { errorMessage } from '../api/client';
-import { addBlock, deletePlan, getPlan, updatePlan } from '../api/plans';
+import { deleteBlock, updateBlock } from '../../api/blocks';
+import { errorMessage } from '../../api/client';
+import { addBlock, deletePlan, getPlan, updatePlan } from '../../api/plans';
 import {
   useReportUnsavedChanges,
   useUnsavedSections,
   type OnUnsavedChange,
-} from '../hooks/unsavedChanges';
-import { useRequest } from '../hooks/useRequest';
-import { BlockForm, type BlockFormValues } from './BlockForm';
-import { PlanBlock } from './PlanBlock';
+} from '../../hooks/unsavedChanges';
+import { useRequest } from '../../hooks/useRequest';
+import { BlockForm, type BlockFormValues } from '../blocks/BlockForm';
+import { PlanBlock } from '../blocks/PlanBlock';
 import { PlanDate } from './PlanDate';
-import { ProfileSelect } from './ProfileSelect';
-import { joinWithAnd, pluralize } from '../text';
+import { ProfileSelect } from '../profiles/ProfileSelect';
+import { joinWithAnd, pluralize } from '../../text';
 import { TemplateToggle } from './TemplateToggle';
 import { TodayNote } from './TodayNote';
 

@@ -8,18 +8,18 @@ import {
   type ProfileCreate,
   type ProfileEntry,
 } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
+import { errorMessage } from '../../api/client';
 import {
   createProfile,
   getProfile,
   getProfiles,
   updateProfile,
-} from '../api/profiles';
+} from '../../api/profiles';
 import {
   useReportUnsavedChanges,
   type OnUnsavedChange,
-} from '../hooks/unsavedChanges';
-import { useRequest } from '../hooks/useRequest';
+} from '../../hooks/unsavedChanges';
+import { useRequest } from '../../hooks/useRequest';
 import { ContactList, type ContactDraft } from './ContactList';
 import { ProfileEntryList, type EntryDraft } from './ProfileEntryList';
 
