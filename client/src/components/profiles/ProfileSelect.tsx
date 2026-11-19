@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { ClassroomProfileSummary, Plan } from '@prep-period/shared';
-import { errorMessage } from '../api/client';
-import { updatePlan } from '../api/plans';
-import { getProfiles } from '../api/profiles';
-import { useRequest } from '../hooks/useRequest';
+import { errorMessage } from '../../api/client';
+import { updatePlan } from '../../api/plans';
+import { getProfiles } from '../../api/profiles';
+import { useRequest } from '../../hooks/useRequest';
 
 type Props = {
   plan: Plan;

@@ -7,10 +7,10 @@ import {
   type ActivityInputRequest,
   type Annotation,
 } from '@prep-period/shared';
-import { saveActivities } from '../api/blocks';
-import type { OnUnsavedChange } from '../hooks/unsavedChanges';
-import { useDraftList } from '../hooks/useDraftList';
-import { joinWithAnd, pluralize } from '../text';
+import { saveActivities } from '../../api/blocks';
+import type { OnUnsavedChange } from '../../hooks/unsavedChanges';
+import { useDraftList } from '../../hooks/useDraftList';
+import { joinWithAnd, pluralize } from '../../text';
 import { ActivityRow, type ActivityDraft } from './ActivityRow';
 
 type Props = {

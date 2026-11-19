@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import type { Plan } from '@prep-period/shared';
-import { updatePlan } from '../api/plans';
+import { updatePlan } from '../../api/plans';
 import {
   useReportUnsavedChanges,
   type OnUnsavedChange,
-} from '../hooks/unsavedChanges';
-import { useRequest } from '../hooks/useRequest';
+} from '../../hooks/unsavedChanges';
+import { useRequest } from '../../hooks/useRequest';
 
 type Props = {
   planId: string;

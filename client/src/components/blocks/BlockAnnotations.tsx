@@ -4,9 +4,9 @@ import {
   type Annotation,
   type AnnotationInputRequest,
 } from '@prep-period/shared';
-import { saveAnnotations } from '../api/blocks';
-import type { OnUnsavedChange } from '../hooks/unsavedChanges';
-import { useDraftList } from '../hooks/useDraftList';
+import { saveAnnotations } from '../../api/blocks';
+import type { OnUnsavedChange } from '../../hooks/unsavedChanges';
+import { useDraftList } from '../../hooks/useDraftList';
 import { AnnotationRow, type AnnotationDraft } from './AnnotationRow';
 
 type Props = {

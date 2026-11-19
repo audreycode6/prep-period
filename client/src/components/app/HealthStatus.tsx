@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { HealthResponse } from '@prep-period/shared';
-import { getHealth } from '../api/health';
+import { getHealth } from '../../api/health';
 
 export function HealthStatus() {
   const [health, setHealth] = useState<HealthResponse | null>(null);

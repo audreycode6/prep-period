@@ -2,11 +2,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Plan } from '@prep-period/shared';
-import { ApiError } from '../api/client';
-import { updatePlan } from '../api/plans';
+import { ApiError } from '../../api/client';
+import { updatePlan } from '../../api/plans';
 import { PlanDate } from './PlanDate';
 
-vi.mock('../api/plans');
+vi.mock('../../api/plans');
 
 const PLAN_ID = 'plan-1';
 

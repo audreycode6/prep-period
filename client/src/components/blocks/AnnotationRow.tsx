@@ -3,7 +3,7 @@ import {
   type Activity,
   type AnnotationType,
 } from '@prep-period/shared';
-import { ANNOTATION_TYPE_LABELS } from '../annotationTypes';
+import { ANNOTATION_TYPE_LABELS } from './annotationTypes';
 
 // One annotation's fields in the list while it's being edited. `key`
 // identifies the row on screen, for React and for finding the draft to change,

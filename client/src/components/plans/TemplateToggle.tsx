@@ -1,6 +1,6 @@
 import type { Plan } from '@prep-period/shared';
-import { updatePlan } from '../api/plans';
-import { useRequest } from '../hooks/useRequest';
+import { updatePlan } from '../../api/plans';
+import { useRequest } from '../../hooks/useRequest';
 
 type Props = {
   planId: string;

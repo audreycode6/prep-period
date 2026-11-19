@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Teacher } from '@prep-period/shared';
-import { logout } from '../api/auth';
-import { duplicatePlan } from '../api/plans';
-import { useRequest } from '../hooks/useRequest';
-import { PlanEditor } from './PlanEditor';
-import { PlanList } from './PlanList';
-import { ProfileForm } from './ProfileForm';
+import { logout } from '../../api/auth';
+import { duplicatePlan } from '../../api/plans';
+import { useRequest } from '../../hooks/useRequest';
+import { PlanEditor } from '../plans/PlanEditor';
+import { PlanList } from '../plans/PlanList';
+import { ProfileForm } from '../profiles/ProfileForm';
 
 type Props = {
   teacher: Teacher;

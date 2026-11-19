@@ -7,8 +7,8 @@ import {
 import {
   useReportUnsavedChanges,
   type OnUnsavedChange,
-} from '../hooks/unsavedChanges';
-import { useRequest } from '../hooks/useRequest';
+} from '../../hooks/unsavedChanges';
+import { useRequest } from '../../hooks/useRequest';
 
 export type BlockFormValues = Pick<
   Block,
