@@ -4,6 +4,9 @@ import { errorMessage } from '../api/client';
 import { createPlan, deletePlan, getPlans } from '../api/plans';
 import { getProfiles } from '../api/profiles';
 import { useRequest } from '../hooks/useRequest';
+import { useStoredPlanFilter } from '../hooks/useStoredPlanFilter';
+import { matchesFilter } from '../planFilters';
+import { TemplateFilter } from './TemplateFilter';
 
 type Props = {
   onOpen: (planId: string) => void;
@@ -13,9 +16,11 @@ type Props = {
 
 /**
  * The teacher's plans, which can be opened, duplicated or deleted, and a
- * form to create one. Creating a plan opens it through `onOpen`; a rejected
- * `onDuplicate` shows its error. With no live profiles, it asks for a
- * profile instead of offering a new plan.
+ * form to create one, replaced by a request for a profile while there are
+ * no live profiles. Creating a plan opens it through `onOpen`; a rejected
+ * `onDuplicate` shows its error. While the list holds both templates and
+ * other plans, it can be filtered by kind, remembering the last choice in
+ * this browser.
  */
 export function PlanList({ onOpen, onNewProfile, onDuplicate }: Props) {
   // null until the first load answers, so loading and an empty list differ
@@ -25,6 +30,7 @@ export function PlanList({ onOpen, onNewProfile, onDuplicate }: Props) {
     null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [chosenFilter, setChosenFilter] = useStoredPlanFilter();
   const [title, setTitle] = useState('');
   const { pending: creating, error: createError, run } = useRequest();
   const { pending: copying, error: copyError, run: runCopy } = useRequest();
@@ -42,6 +48,15 @@ export function PlanList({ onOpen, onNewProfile, onDuplicate }: Props) {
       .then(setProfiles)
       .catch((err: unknown) => setLoadError(errorMessage(err)));
   }, []);
+
+  const hasTemplatesAndPlans =
+    plans !== null &&
+    plans.some((plan) => plan.isTemplate) &&
+    plans.some((plan) => !plan.isTemplate);
+  const shownFilter =
+    plans && plans.some((plan) => matchesFilter(plan, chosenFilter))
+      ? chosenFilter
+      : 'all';
 
   async function handleCreate(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -102,39 +117,48 @@ export function PlanList({ onOpen, onNewProfile, onDuplicate }: Props) {
       ) : plans.length === 0 ? (
         <p>No plans yet.</p>
       ) : (
-        <ul>
-          {plans.map((plan) => (
-            <li key={plan.id}>
-              {plan.title}
-              {plan.date && ` · ${plan.date}`} · {plan.profile.name}
-              {plan.profile.isArchived && ' (archived)'}
-              {/* labels name the plan, since every row's buttons look alike */}
-              <button
-                type="button"
-                aria-label={`Open "${plan.title}"`}
-                onClick={() => onOpen(plan.id)}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                aria-label={`Duplicate "${plan.title}"`}
-                disabled={copying}
-                onClick={() => runCopy(() => onDuplicate(plan.id))}
-              >
-                Duplicate
-              </button>
-              <button
-                type="button"
-                aria-label={`Delete "${plan.title}"`}
-                disabled={deleting}
-                onClick={() => handleDelete(plan)}
-              >
-                Delete
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          {hasTemplatesAndPlans && (
+            <TemplateFilter filter={shownFilter} onChange={setChosenFilter} />
+          )}
+          <ul>
+            {plans
+              .filter((plan) => matchesFilter(plan, shownFilter))
+              .map((plan) => (
+                <li key={plan.id}>
+                  {plan.title}
+                  {plan.isTemplate && ' · Template'}
+                  {plan.date && ` · ${plan.date}`} · {plan.profile.name}
+                  {plan.profile.isArchived && ' (archived)'}
+                  {/* labels name the plan, since every row's buttons look
+                      alike */}
+                  <button
+                    type="button"
+                    aria-label={`Open "${plan.title}"`}
+                    onClick={() => onOpen(plan.id)}
+                  >
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Duplicate "${plan.title}"`}
+                    disabled={copying}
+                    onClick={() => runCopy(() => onDuplicate(plan.id))}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete "${plan.title}"`}
+                    disabled={deleting}
+                    onClick={() => handleDelete(plan)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </>
       )}
     </section>
   );
