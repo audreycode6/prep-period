@@ -16,6 +16,7 @@ import {
 import { useRequest } from '../hooks/useRequest';
 import { BlockForm, type BlockFormValues } from './BlockForm';
 import { PlanBlock } from './PlanBlock';
+import { PlanDate } from './PlanDate';
 import { ProfileSelect } from './ProfileSelect';
 import { joinWithAnd, pluralize } from '../text';
 import { TemplateToggle } from './TemplateToggle';
@@ -34,7 +35,7 @@ type Props = {
 };
 
 /**
- * Editor for one plan: its profile, today-note and blocks, with their
+ * Editor for one plan: its date, profile, today-note and blocks, with their
  * activities and annotations. Back to plans calls `onClose`; deleting the
  * plan calls `onDeleted`. A rejected `onDuplicate` shows its error.
  * `onUnsavedChange` covers the whole plan. Given `newProfileId`, moves the
@@ -196,7 +197,12 @@ export function PlanEditor({
             onSubmit={handleAdd}
             onUnsavedChange={onUnsavedChangeFor('newBlock')}
           />
-          {plan.date && <p>{plan.date}</p>}
+          <PlanDate
+            planId={plan.id}
+            date={plan.date}
+            onSaved={setPlan}
+            onUnsavedChange={onUnsavedChangeFor('date')}
+          />
           <ProfileSelect
             plan={plan}
             onSaved={setPlan}
