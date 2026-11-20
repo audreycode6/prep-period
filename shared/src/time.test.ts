@@ -66,6 +66,10 @@ describe('minutesToTimeInput', () => {
 });
 
 describe('minutesToDisplay', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   // Some ICU versions put a narrow no-break space before AM/PM, so spaces are
   // compared as plain spaces.
   const display = (minutes: number, locale: string) =>
@@ -82,6 +86,11 @@ describe('minutesToDisplay', () => {
   it("formats in the given locale's style, not a fixed one", () => {
     expect(display(797, 'en-GB')).toBe('13:17');
     expect(display(480, 'en-GB')).toBe('8:00');
+  });
+
+  it("doesn't shift the hour in a time zone behind UTC", () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    expect(display(480, 'en-US')).toBe('8:00 AM');
   });
 });
 
