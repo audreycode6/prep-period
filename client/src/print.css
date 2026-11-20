@@ -4,11 +4,11 @@
 }
 
 /* keeps the line breaks typed into notes and descriptions */
-.printed-plan p {
+.plan-view p {
   white-space: pre-line;
 }
 
-.printed-block {
+.block-view {
   break-inside: avoid;
 }
 
