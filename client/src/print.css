@@ -1,0 +1,19 @@
+.today-note {
+  border: 2px solid;
+  padding: 0.5em 0.75em;
+}
+
+/* keeps the line breaks typed into notes and descriptions */
+.printed-plan p {
+  white-space: pre-line;
+}
+
+.printed-block {
+  break-inside: avoid;
+}
+
+@media print {
+  .screen-only {
+    display: none;
+  }
+}
