@@ -45,16 +45,33 @@ export function minutesToTimeInput(minutes: number): string {
 
 /**
  * Formats minutes since midnight as a clock time in the locale's style
- * ("1:17 PM" in en-US, "13:17" in en-GB), the user's own when none is given.
- * Uses UTC so a daylight-saving change can't shift the hour.
+ * ("1:17 PM" in en-US, "13:17" in en-GB), or in the browser's language
+ * setting when no locale is given.
  */
 export function minutesToDisplay(minutes: number, locale?: string): string {
   const time = new Date(Date.UTC(1970, 0, 1, 0, minutes));
   return new Intl.DateTimeFormat(locale, {
     hour: 'numeric',
     minute: '2-digit',
+    // built in UTC; formatting in the user's time zone would shift the hour
     timeZone: 'UTC',
   }).format(time);
+}
+
+/**
+ * Formats a "YYYY-MM-DD" date as a long date in the locale's style
+ * ("Thursday, November 12, 2026" in en-US), or in the browser's language
+ * setting when no locale is given.
+ */
+export function dateToDisplay(date: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    // built in UTC; formatting in the user's time zone would shift the hour
+    timeZone: 'UTC',
+  }).format(new Date(`${date}T00:00:00Z`));
 }
 
 /**
