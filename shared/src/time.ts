@@ -69,7 +69,7 @@ export function dateToDisplay(date: string, locale?: string): string {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    // built in UTC; formatting in the user's time zone would shift the hour
+    // built at midnight UTC; a time zone behind UTC would show the day before
     timeZone: 'UTC',
   }).format(new Date(`${date}T00:00:00Z`));
 }
