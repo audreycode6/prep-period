@@ -35,6 +35,11 @@ const BLOCK: Block = {
 };
 
 describe('BlockView', () => {
+  it("shows the block's description when it has one", () => {
+    render(<BlockView block={{ ...BLOCK, description: 'On the carpet' }} />);
+    expect(screen.getByText('On the carpet')).toBeVisible();
+  });
+
   it("shows each activity's minutes, or flexible when it has none", () => {
     render(<BlockView block={BLOCK} />);
     const [readAloud, independentReading] = screen.getAllByRole('listitem');
