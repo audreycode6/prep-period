@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  dateToDisplay,
   durationInputToMinutes,
   formatDuration,
   minutesToDisplay,
@@ -65,6 +66,10 @@ describe('minutesToTimeInput', () => {
 });
 
 describe('minutesToDisplay', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   // Some ICU versions put a narrow no-break space before AM/PM, so spaces are
   // compared as plain spaces.
   const display = (minutes: number, locale: string) =>
@@ -81,6 +86,39 @@ describe('minutesToDisplay', () => {
   it("formats in the given locale's style, not a fixed one", () => {
     expect(display(797, 'en-GB')).toBe('13:17');
     expect(display(480, 'en-GB')).toBe('8:00');
+  });
+
+  it("doesn't shift the hour in a time zone behind UTC", () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    expect(display(480, 'en-US')).toBe('8:00 AM');
+  });
+});
+
+describe('dateToDisplay', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('writes the weekday and month in words, then the day and year', () => {
+    expect(dateToDisplay('2026-11-12', 'en-US')).toBe(
+      'Thursday, November 12, 2026',
+    );
+    expect(dateToDisplay('2027-01-01', 'en-US')).toBe(
+      'Friday, January 1, 2027',
+    );
+  });
+
+  it("formats in the given locale's style, not a fixed one", () => {
+    expect(dateToDisplay('2026-11-12', 'en-GB')).toBe(
+      'Thursday, 12 November 2026',
+    );
+  });
+
+  it("doesn't move the date back a day in a time zone behind UTC", () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    expect(dateToDisplay('2026-11-12', 'en-US')).toBe(
+      'Thursday, November 12, 2026',
+    );
   });
 });
 

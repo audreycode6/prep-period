@@ -5,6 +5,7 @@ import { duplicatePlan } from '../../api/plans';
 import { useRequest } from '../../hooks/useRequest';
 import { PlanEditor } from '../plans/PlanEditor';
 import { PlanList } from '../plans/PlanList';
+import { PrintPage } from '../plans/PrintPage';
 import { ProfileForm } from '../profiles/ProfileForm';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
 type Page =
   | { kind: 'planList' }
   | { kind: 'planEditor'; planId: string; newProfileId?: string }
+  | { kind: 'planPrint'; planId: string }
   | { kind: 'profileForm'; profileId: string | null; returnTo: Page };
 
 /**
@@ -93,7 +95,7 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
 
   return (
     <>
-      <p>
+      <p className="screen-only">
         Signed in as {teacher.email}
         <button type="button" disabled={signingOut} onClick={handleSignOut}>
           Sign out
@@ -122,6 +124,7 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
           onClose={() => leaveTo({ kind: 'planList' })}
           onDeleted={() => setPage({ kind: 'planList' })}
           onDuplicate={() => duplicateAndOpen(page.planId)}
+          onPrint={() => leaveTo({ kind: 'planPrint', planId: page.planId })}
           onEditProfile={(profileId) =>
             leaveTo({ kind: 'profileForm', profileId, returnTo: page })
           }
@@ -133,6 +136,12 @@ export function SignedInApp({ teacher, onSignedOut }: Props) {
             })
           }
           onUnsavedChange={setHasUnsavedChanges}
+        />
+      )}
+      {page.kind === 'planPrint' && (
+        <PrintPage
+          planId={page.planId}
+          onClose={() => setPage({ kind: 'planEditor', planId: page.planId })}
         />
       )}
       {page.kind === 'profileForm' && (
