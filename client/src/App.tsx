@@ -31,8 +31,10 @@ export default function App() {
 
   return (
     <main>
-      <h1>Prep Period</h1>
-      <HealthStatus />
+      <header className="screen-only">
+        <h1>Prep Period</h1>
+        <HealthStatus />
+      </header>
       {auth.kind === 'checkingSession' && <p>Checking sign-in...</p>}
       {auth.kind === 'sessionCheckFailed' && <p role="alert">{auth.error}</p>}
       {auth.kind === 'signedOut' && (

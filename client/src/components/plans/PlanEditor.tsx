@@ -27,6 +27,7 @@ type Props = {
   onClose: () => void;
   onDeleted: () => void;
   onDuplicate: () => Promise<void>;
+  onPrint: () => void;
   onEditProfile: (profileId: string) => void;
   onNewProfile: () => void;
   onUnsavedChange?: OnUnsavedChange;
@@ -36,8 +37,8 @@ type Props = {
 
 /**
  * Editor for one plan: its date, profile, today-note and blocks, with their
- * activities and annotations. Back to plans calls `onClose`; deleting the
- * plan calls `onDeleted`. A rejected `onDuplicate` shows its error.
+ * activities and annotations. `onDeleted` fires only once the plan is
+ * deleted, after confirming. A rejected `onDuplicate` shows its error.
  * `onUnsavedChange` covers the whole plan. Given `newProfileId`, moves the
  * plan onto that profile as it loads.
  */
@@ -46,6 +47,7 @@ export function PlanEditor({
   onClose,
   onDeleted,
   onDuplicate,
+  onPrint,
   onEditProfile,
   onNewProfile,
   onUnsavedChange,
@@ -175,20 +177,23 @@ export function PlanEditor({
       ) : (
         <>
           <h2>{plan.title}</h2>
+          <button type="button" onClick={onPrint}>
+            Print View
+          </button>
           <TemplateToggle
             planId={plan.id}
             isTemplate={plan.isTemplate}
             onSaved={setPlan}
           />
+          <button type="button" onClick={handleDeletePlan}>
+            Delete plan
+          </button>
           <button
             type="button"
             disabled={copying}
             onClick={() => runCopy(onDuplicate)}
           >
             Duplicate
-          </button>
-          <button type="button" onClick={handleDeletePlan}>
-            Delete plan
           </button>
           {copyError && <p role="alert">{copyError}</p>}
           <h3>Add a block</h3>
