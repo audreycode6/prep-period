@@ -1,3 +1,26 @@
+/* empty margin boxes take the place of the browser's own header and footer */
+@page {
+  margin: 0.5in;
+  @top-left {
+    content: '';
+  }
+  @top-center {
+    content: '';
+  }
+  @top-right {
+    content: '';
+  }
+  @bottom-left {
+    content: '';
+  }
+  @bottom-center {
+    content: '';
+  }
+  @bottom-right {
+    content: '';
+  }
+}
+
 .today-note {
   border: 2px solid;
   padding: 0.5em 0.75em;
@@ -8,7 +31,17 @@
   white-space: pre-line;
 }
 
+.plan-view h3,
+.plan-view h4 {
+  break-after: avoid;
+}
+
 .block-view {
+  break-inside: avoid;
+}
+
+/* a block taller than a page breaks between activities instead */
+.block-view > ol > li {
   break-inside: avoid;
 }
 
