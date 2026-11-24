@@ -1,7 +1,25 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { Block } from '@prep-period/shared';
+import {
+  annotationTypeSchema,
+  type Annotation,
+  type AnnotationType,
+  type Block,
+} from '@prep-period/shared';
 import { BlockView } from './BlockView';
+
+/**
+ * One whole-block annotation per type, in the order given, each with the text
+ * "A <type> note".
+ */
+function wholeBlockAnnotations(types: readonly AnnotationType[]): Annotation[] {
+  return types.map((type) => ({
+    id: type,
+    activityId: null,
+    type,
+    text: `A ${type} note`,
+  }));
+}
 
 const BLOCK: Block = {
   id: 'block-1',
@@ -64,6 +82,38 @@ describe('BlockView', () => {
       'Must know: Groups are paused this week',
     );
     expect(blockAnnotation.nextElementSibling).toBe(activityList);
+  });
+
+  it('marks each annotation with its type', () => {
+    const annotations = wholeBlockAnnotations(annotationTypeSchema.options);
+    render(<BlockView block={{ ...BLOCK, annotations }} />);
+
+    for (const type of annotationTypeSchema.options) {
+      expect(screen.getByText(`A ${type} note`)).toHaveAttribute(
+        'data-annotation-type',
+        type,
+      );
+    }
+  });
+
+  it('shows annotations from most to least urgent', () => {
+    const annotations = wholeBlockAnnotations([
+      'if_time',
+      'heads_up',
+      'good_to_know',
+      'must_know',
+    ]);
+    render(<BlockView block={{ ...BLOCK, annotations }} />);
+    const shownTypes = screen
+      .getAllByText(/ note$/)
+      .map((annotation) => annotation.getAttribute('data-annotation-type'));
+
+    expect(shownTypes).toEqual([
+      'must_know',
+      'heads_up',
+      'good_to_know',
+      'if_time',
+    ]);
   });
 
   it("puts an activity's annotations under that activity", () => {

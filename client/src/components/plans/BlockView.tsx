@@ -1,4 +1,5 @@
 import {
+  annotationTypeSchema,
   formatDuration,
   minutesToDisplay,
   type Activity,
@@ -21,11 +22,16 @@ function formatActivityMinutes(activity: Activity) {
 }
 
 /**
- * Annotations as paragraphs, each led by its type's label.
+ * Annotations as paragraphs in urgency order, each led by its type's label.
+ * Annotations of the same type keep their order.
  */
 function AnnotationsView({ annotations }: { annotations: Annotation[] }) {
-  return annotations.map((annotation) => (
-    <p key={annotation.id}>
+  const typesByUrgency = annotationTypeSchema.options;
+  const annotationsByUrgency = annotations.toSorted(
+    (a, b) => typesByUrgency.indexOf(a.type) - typesByUrgency.indexOf(b.type),
+  );
+  return annotationsByUrgency.map((annotation) => (
+    <p key={annotation.id} data-annotation-type={annotation.type}>
       <b>{ANNOTATION_TYPE_LABELS[annotation.type]}:</b> {annotation.text}
     </p>
   ));
