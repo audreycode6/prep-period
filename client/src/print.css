@@ -12,6 +12,17 @@
   break-inside: avoid;
 }
 
+/* borders rather than color, since most printing is black and white */
+[data-annotation-type='must_know'],
+[data-annotation-type='heads_up'] {
+  border: 1px solid;
+  padding: 0.25em 0.5em;
+}
+
+[data-annotation-type='must_know'] {
+  border-width: 2px;
+}
+
 @media print {
   .screen-only {
     display: none;
